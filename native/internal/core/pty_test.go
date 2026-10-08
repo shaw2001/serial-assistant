@@ -43,6 +43,12 @@ func TestNativePTY(t *testing.T) {
 	}
 	s.Send("session-one", Payload{"00 FF E6 B8 A9 E5 BA A6 0D 0A", "hex", "utf-8", "none"})
 	s.Send("session-two", Payload{"port2", "text", "utf-8", "none"})
+	// Exact control bytes used by the UI: prefix+Tab, another Tab, suffix+Enter.
+	for _, content := range []string{"68 65 09", "09", "20 31 0D 0A"} {
+		if _, e := s.Send("session-one", Payload{content, "hex", "utf-8", "none"}); e != nil {
+			t.Fatal(e)
+		}
+	}
 	file := filepath.Join(t.TempDir(), "all.jsonl")
 	if e := s.Export(file, ExportOptions{ID: "session-one", Scope: "all", Format: "jsonl", Encoding: "utf-8"}); e != nil {
 		t.Fatal(e)

@@ -22,3 +22,11 @@
 - Real Go two-kernel-PTY integration passes: 00/FF, fragmented Chinese, isolated TX, raw disk export, ten reconnects, periodic sends and one endpoint unplugged while another stays connected.
 - Linux-to-Windows single-file EXE cross compilation passes. Final Windows workflow checks resource version, maximum 10 MiB size, actual embedded WebView2 renderer boot, embedded OPPO Sans load, footer position and receive-area height. Startup timing is runner-specific.
 - Physical USB adapters, all custom baud rates/flow-control wiring, sleeping/resuming and long full-rate operation remain hardware acceptance items.
+
+## v0.1.2 — 2026-10-08
+
+- 19 JavaScript tests pass. Five keyboard regressions cover Enter/Shift+Enter/Ctrl+Enter, IME composition and keyCode 229, fresh input before preview resolves, repeat/busy suppression, malformed HEX rejection, prefix+Tab without endings, repeated Tab, suffix/Enter and Execute button without duplicate prefixes, UTF-8/GBK, all selected endings, multiline Tab rejection, Shift+Tab/HEX/dialog navigation, separate device state and failed writes retaining input/focus.
+- Go service tests pass with `-race`.
+- Two real Linux kernel PTYs verify exact `he + 0x09`, repeated `0x09`, and `space + 1 + CRLF` through the production Go serial driver, alongside existing binary/fragmented Chinese, port isolation, raw export, reconnect, periodic and unplug checks.
+- Windows x64 EXE cross compilation passes; version is 0.1.2. Windows release workflow independently runs tests, compiles, verifies PE version/size and starts the actual embedded renderer to validate OPPO Sans and layout before publishing.
+- Tab completion is firmware-provided. No physical RT-Thread board was available for this session; automated checks verify forwarding/continuation semantics and exact bytes, not a specific firmware build.

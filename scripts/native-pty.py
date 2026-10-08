@@ -20,7 +20,7 @@ def drain(fd,expected):
     while len(data)<len(expected) and time.time()<deadline:
         if select.select([fd],[],[],.1)[0]:data+=os.read(fd,65536)
     assert data==expected,(data,expected)
-drain(pairs[0][0],raw);drain(pairs[1][0],b'port2')
+drain(pairs[0][0],raw+b'he\t\t 1\r\n');drain(pairs[1][0],b'port2')
 assert reopened.wait(15),'reconnect did not finish'
 os.close(pairs[0][0]);pairs[0]=(None,pairs[0][1])
 code=process.wait(timeout=10)
@@ -28,4 +28,4 @@ for master,slave in pairs:
     if master is not None:os.close(master)
     os.close(slave)
 assert code==0,code
-print('PASS: Go native serial, two kernel PTYs, binary + fragmented Chinese, separate TX, disk export, reconnect and unplug')
+print('PASS: Go native serial, two kernel PTYs, exact prefix/Tab/Enter bytes, binary + fragmented Chinese, separate TX, disk export, reconnect and unplug')
