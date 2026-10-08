@@ -30,3 +30,16 @@
 - Two real Linux kernel PTYs verify exact `he + 0x09`, repeated `0x09`, and `space + 1 + CRLF` through the production Go serial driver, alongside existing binary/fragmented Chinese, port isolation, raw export, reconnect, periodic and unplug checks.
 - Windows x64 EXE cross compilation passes; version is 0.1.2. Windows release workflow independently runs tests, compiles, verifies PE version/size and starts the actual embedded renderer to validate OPPO Sans and layout before publishing.
 - Tab completion is firmware-provided. No physical RT-Thread board was available for this session; automated checks verify forwarding/continuation semantics and exact bytes, not a specific firmware build.
+
+## v0.1.3 — 2026-10-08
+
+- 22 Node tests pass, including RTT prompt parsing, fragmented/ANSI redraw, shared-prefix candidate deduplication, input synchronization and exact backspace/suffix/ending bytes.
+- Go core race tests and two native kernel PTY integration tests pass.
+- Windows cross compilation: standalone EXE 4.32 MiB. Windows workflow additionally validates executable version and real desktop/font/layout startup before release publication.
+- No RTT hardware connected to this environment. Standard msh/finsh/tshell prompts supported; custom prompts need adaptation.
+
+## v0.1.4 — 2026-10-08
+
+- Sending successful ordinary text/HEX clears the submitted draft and preserves history. Failed sends preserve input.
+- Tests verify edits during pending writes, independent background drafts, quick-command draft preservation and empty Enter avoiding a duplicate send.
+- Standalone Windows cross compilation passes. Actual Windows startup and RTT hardware tests remain pending.

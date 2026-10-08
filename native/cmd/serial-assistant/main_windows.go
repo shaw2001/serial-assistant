@@ -24,7 +24,7 @@ import (
 	"unsafe"
 )
 
-const version = "0.1.2"
+const version = "0.1.4"
 
 var user32 = windows.NewLazySystemDLL("user32.dll")
 var messageBox = user32.NewProc("MessageBoxW")

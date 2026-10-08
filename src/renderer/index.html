@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'"><title>串口助手 v0.1.2</title><link rel="stylesheet" href="app.css"></head><body>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'"><title>串口助手 v0.1.4</title><link rel="stylesheet" href="app.css"></head><body>
 <div id="sui2">
 <header class="su-header">
-<div class="su-brand"><span class="su-brand-name">串口助手</span><span class="su-subtitle">本地工作台</span><span class="su-demo-tag" data-el="version">v0.1.2</span></div>
+<div class="su-brand"><span class="su-brand-name">串口助手</span><span class="su-subtitle">本地工作台</span><span class="su-demo-tag" data-el="version">v0.1.4</span></div>
 <div class="su-header-actions"><label class="su-check"><input data-el="always-top" type="checkbox"/><span>窗口置顶</span></label><button data-action="profile" type="button">配置方案</button><button data-action="help" type="button">使用说明</button></div>
 </header>
 <nav aria-label="多串口会话" class="su-session-bar"><div aria-label="串口设备" class="su-tabs" data-el="tabs" role="tablist"></div><button class="su-add-port" data-action="add-port" data-el="add-port" type="button">添加串口</button><span class="su-session-count" data-el="session-count">0 / 4 个设备</span></nav>
@@ -29,6 +29,7 @@
 </section>
 <section aria-label="发送数据" class="su-send-panel">
 <div class="su-send-title"><h2>发送数据</h2><span class="su-send-target" data-el="send-target">未选择串口</span><span class="su-keyboard-hint" data-el="keyboard-hint" title="Shift+Tab 可离开发送框">Enter 发送 · Shift+Enter 换行 · Tab 补全</span><div class="su-send-config"><label><span class="su-sr">发送格式</span><select data-el="send-mode"><option value="text">文本</option><option value="hex">HEX</option></select></label><label><span class="su-sr">发送编码</span><select data-el="encoding"><option value="utf-8">UTF-8</option><option value="ascii">ASCII</option><option value="gbk">GBK</option></select></label><label><span class="su-sr">追加结尾符</span><select data-el="ending"><option value="none">无结尾符</option><option value="cr">追加 CR</option><option value="lf">追加 LF</option><option selected="" value="crlf">追加 CRLF</option></select></label></div></div>
+<div data-el="completion" class="su-completion" hidden><span data-el="completion-status"></span><div data-el="completion-candidates"></div></div>
 <textarea data-el="input" placeholder="输入指令；Enter 发送，Shift+Enter 换行，Tab 交给设备补全" rows="2" spellcheck="false"></textarea>
 <div class="su-byte-preview"><span data-el="preview-label">最终字节</span><code data-el="preview">等待输入</code><span data-el="length">0 B</span></div>
 <div class="su-inline-error" data-el="input-error" hidden="" role="alert"></div>

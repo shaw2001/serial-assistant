@@ -136,3 +136,5 @@ html,body{height:100%;overflow:hidden}
 #sui2 .su-demo-footer [data-el=health]{margin-left:auto}
 #sui2 .su-notice{position:absolute;bottom:34px;right:12px;left:auto;max-width:70%;padding:7px 12px;border:1px solid #b7cff4;border-radius:4px;box-shadow:0 3px 12px #152d4a10;z-index:20}
 @media(max-width:860px){#sui2 .su-display-hint{display:none}#sui2 .su-workspace{grid-template-columns:minmax(0,1fr) 225px}}
+
+#sui2 .su-completion{font-size:12px;color:#465366;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0;}#sui2 .su-completion[hidden]{display:none;}#sui2 .su-completion button{font-family:Consolas,monospace;margin:2px;padding:2px 8px;min-height:26px;}
