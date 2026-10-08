@@ -1,0 +1,30 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Native kernel PTY integration
+        if: runner.os == 'Linux'
+        run: npm run test:pty
+      - name: Native Windows binding and desktop startup
+        if: runner.os == 'Windows'
+        run: |
+          node -e "require('serialport').SerialPort.list().then(p=>console.log('Native Windows enumeration:',p.length)).catch(e=>{console.error(e);process.exit(1)})"
+          node scripts/desktop-smoke.cjs

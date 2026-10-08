@@ -1,0 +1,10 @@
+'use strict';
+const fs=require('node:fs');
+const path=require('node:path');
+const crypto=require('node:crypto');
+const directory=path.resolve(__dirname,'../release');
+const names=fs.readdirSync(directory).filter(n=>/\.(exe|zip|tar\.gz)$/.test(n)).sort();
+if(!names.length)throw new Error('No release artifacts found.');
+const lines=names.map(name=>crypto.createHash('sha256').update(fs.readFileSync(path.join(directory,name))).digest('hex')+'  '+name);
+fs.writeFileSync(path.join(directory,'SHA256SUMS.txt'),lines.join('\n')+'\n');
+console.log(lines.join('\n'));

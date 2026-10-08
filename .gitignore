@@ -1,0 +1,8 @@
+node_modules/
+dist/
+release/
+assets/*.woff2
+*.log
+*.jsonl
+.DS_Store
+Thumbs.db

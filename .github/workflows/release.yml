@@ -1,0 +1,74 @@
+name: Release v0.1.0
+on:
+  push:
+    branches: [main]
+    paths: [package.json, .github/workflows/release.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-v0.1.0
+  cancel-in-progress: false
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:pty
+  windows-release:
+    needs: integration
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Verify version
+        run: node -e "if(require('./package.json').version!=='0.1.0')throw new Error('Version must be 0.1.0')"
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Native Windows serial and desktop smoke test
+        run: |
+          node -e "require('serialport').SerialPort.list().then(p=>console.log('Native Windows enumeration:',p.length)).catch(e=>{console.error(e);process.exit(1)})"
+          node scripts/desktop-smoke.cjs
+      - name: Compile Windows installer and ZIP
+        run: npx electron-builder --win nsis zip --x64 --publish never --config.win.signAndEditExecutable=true
+      - name: Verify executable version and packaged files
+        shell: pwsh
+        run: |
+          $info = (Get-Item 'release/win-unpacked/SerialAssistant.exe').VersionInfo
+          if ($info.ProductVersion -notlike '0.1.0*') { throw "Incorrect product version: $($info.ProductVersion)" }
+          if (!(Test-Path 'release/win-unpacked/resources/app.asar')) { throw 'Missing application archive' }
+          if (!(Test-Path 'release/win-unpacked/resources/app.asar.unpacked/node_modules/@serialport/bindings-cpp/prebuilds/win32-x64/@serialport+bindings-cpp.node')) { throw 'Missing Windows native serial binding' }
+      - run: npm run checksums
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SerialAssistant-v0.1.0-Windows-x64
+          path: |
+            release/*.exe
+            release/*.zip
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+      - name: Publish v0.1.0
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          $assets = @('release/SerialAssistant-Setup-0.1.0-win-x64.exe', 'release/SerialAssistant-0.1.0-win-x64.zip', 'release/SHA256SUMS.txt')
+          foreach ($asset in $assets) { if (!(Test-Path $asset)) { throw "Missing asset: $asset" } }
+          gh release create v0.1.0 @assets --target $env:RELEASE_COMMIT --title 'v0.1.0' --notes-file docs/releases/v0.1.0.md --draft
+          if ($LASTEXITCODE -ne 0) { throw 'Release creation/upload failed; existing release will not be overwritten' }
+          gh release edit v0.1.0 --draft=false
+          if ($LASTEXITCODE -ne 0) { throw 'Release publishing failed' }
