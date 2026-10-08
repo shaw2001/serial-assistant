@@ -104,3 +104,35 @@ html{color-scheme:light}body{margin:0;background:#fff}
 @media(pointer:coarse){#sui2 .su-command-buttons button{min-height:44px;min-width:44px;}#sui2 .su-command{padding:4px 0;}#sui2 .su-tab-close{min-height:44px;}#sui2 .su-edit{min-height:44px!important;}#sui2 .su-add-port{min-height:44px;}}
 
 #sui2{border:0;border-radius:0}#sui2 .su-header-actions{margin-right:0}#sui2 .su-log-screen{height:340px}#sui2 .su-receive-encoding select{height:28px;font-size:12px;padding:3px 5px}#sui2 .su-error-state{color:var(--su-red)}#sui2 .su-notice{position:sticky;bottom:0}
+
+/* v0.1.1: the receive area takes all remaining window height. */
+html,body{height:100%;overflow:hidden}
+#sui2{height:100dvh;display:flex;flex-direction:column;--su-log-size:14px}
+#sui2 .su-header,#sui2 .su-session-bar,#sui2 .su-connection,#sui2 .su-demo-footer{flex:none}
+#sui2 .su-workspace{flex:1;min-height:0;overflow:hidden}
+#sui2 .su-main-column{min-height:0;display:flex;flex-direction:column}
+#sui2 .su-log-panel{flex:1;min-height:0;display:flex;flex-direction:column}
+#sui2 .su-log-screen{height:auto!important;flex:1;min-height:100px;background:#fff;color:#17212d;font:var(--su-log-size)/1.55 Consolas,"Cascadia Mono","Courier New","OPPO Sans UI",monospace;tab-size:8;padding:6px 12px;overflow:auto}
+#sui2 .su-log-row{display:block;width:max-content;min-width:100%;padding:0;min-height:1.55em}
+#sui2 .su-log-content{white-space:pre;overflow-wrap:normal}
+#sui2 .su-log-time,#sui2 .su-log-direction,#sui2 .su-log-column-labels{display:none}
+#sui2.su-show-meta .su-log-row{display:grid;grid-template-columns:104px 34px minmax(max-content,1fr);gap:8px}
+#sui2.su-show-meta .su-log-time,#sui2.su-show-meta .su-log-direction{display:block;font-size:12px}
+#sui2.su-wrap-lines .su-log-row{width:100%}
+#sui2.su-wrap-lines .su-log-content{white-space:pre-wrap;overflow-wrap:anywhere}
+#sui2.su-wrap-lines.su-show-meta .su-log-row{grid-template-columns:104px 34px minmax(0,1fr)}
+#sui2 .su-display-toolbar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:5px 14px;border-bottom:1px solid var(--su-border);background:var(--su-subtle);font-size:12px;color:var(--su-muted)}
+#sui2 .su-display-toolbar label{display:flex;align-items:center;gap:5px}
+#sui2 .su-display-toolbar select{height:26px;font-size:12px;padding:2px 5px}
+#sui2 .su-display-hint{margin-left:auto;font-size:11px}
+#sui2 .su-log-toolbar{padding:7px 14px 5px}
+#sui2 .su-search-toolbar{padding-bottom:5px}
+#sui2 .su-send-panel{flex:none;padding:7px 14px}
+#sui2 .su-send-panel textarea{min-height:42px;height:48px;max-height:160px;font:14px/1.4 Consolas,"OPPO Sans UI",monospace}
+#sui2 .su-commands{overflow:auto;padding:10px}
+#sui2 .su-command{min-height:40px;padding:4px 0}
+#sui2 .su-demo-footer{min-height:30px;padding:3px 14px;justify-content:flex-start}
+#sui2 .su-demo-footer button{min-height:24px;padding:1px 7px;font-size:11px}
+#sui2 .su-demo-footer [data-el=health]{margin-left:auto}
+#sui2 .su-notice{position:absolute;bottom:34px;right:12px;left:auto;max-width:70%;padding:7px 12px;border:1px solid #b7cff4;border-radius:4px;box-shadow:0 3px 12px #152d4a10;z-index:20}
+@media(max-width:860px){#sui2 .su-display-hint{display:none}#sui2 .su-workspace{grid-template-columns:minmax(0,1fr) 225px}}

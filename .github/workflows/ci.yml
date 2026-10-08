@@ -17,14 +17,16 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.1'
+          cache-dependency-path: native/go.sum
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Native Go backend tests
+        working-directory: native
+        run: go test ./internal/core
       - name: Native kernel PTY integration
         if: runner.os == 'Linux'
-        run: npm run test:pty
-      - name: Native Windows binding and desktop startup
-        if: runner.os == 'Windows'
-        run: |
-          node -e "require('serialport').SerialPort.list().then(p=>console.log('Native Windows enumeration:',p.length)).catch(e=>{console.error(e);process.exit(1)})"
-          node scripts/desktop-smoke.cjs
+        run: python3 scripts/native-pty.py

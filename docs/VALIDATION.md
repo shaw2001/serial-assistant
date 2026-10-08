@@ -14,3 +14,11 @@
 源码内已包含 CI 和 Release 流水线。恢复仓库权限后，上传最终代码并运行 Release 工作流；只有全部检查与编译成功后才发布 v0.1.0。
 
 如在自己的电脑发布，可先安装官方 GitHub CLI、Node.js 24，执行 `gh auth login --scopes repo,workflow`，再在工程目录运行 `node scripts/publish-github.cjs`。该脚本使用 gh 保存的认证，上传源码、触发并等待 Windows Release；不会覆盖已有发布版本。
+
+## v0.1.1
+
+- 14 JavaScript tests pass, including receive newline rules at every CRLF split, encoding/raw-byte preservation and connected baud apply/reconnect.
+- 5 Go service tests pass with `-race`: payload encoding/limits, four independent ports, duplicate/limit checks, raw capture/export, thirty reopen cycles, failed TX, closing a blocked send, periodic stopping, bounded queues and config protection.
+- Real Go two-kernel-PTY integration passes: 00/FF, fragmented Chinese, isolated TX, raw disk export, ten reconnects, periodic sends and one endpoint unplugged while another stays connected.
+- Linux-to-Windows single-file EXE cross compilation passes. Final Windows workflow checks resource version, maximum 10 MiB size, actual embedded WebView2 renderer boot, embedded OPPO Sans load, footer position and receive-area height. Startup timing is runner-specific.
+- Physical USB adapters, all custom baud rates/flow-control wiring, sleeping/resuming and long full-rate operation remain hardware acceptance items.

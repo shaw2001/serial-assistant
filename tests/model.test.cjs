@@ -18,3 +18,9 @@ test('newline-heavy traffic and encoding rebuild stay bounded; ASCII retains raw
   m.setEncoding('gbk');assert.equal(m.rows.length,10000);assert(m.rowBytes<=16*1024*1024);
   const a=new LogModel('ascii');a.append(r(1,Buffer.from([65,0,128,255])));assert.equal(a.rows[0].text,'A␀��');assert.deepEqual([...a.prefix(a.rows[0])],[65,0,128,255]);
 });
+test('configurable CRLF/LF/CR/none/batch rules survive split delimiters and preserve raw bytes',()=>{
+  const raw=Buffer.from('A\r\nB\nC\rD');
+  const expected={auto:['A','B','C','D'],crlf:['A','B␊C␍D'],lf:['A␍','B','C␍D'],cr:['A','␊B␊C','D'],none:['A␍␊B␊C␍D']};
+  for(const [rule,texts]of Object.entries(expected))for(let split=1;split<raw.length;split++){const m=new LogModel('utf-8',rule);m.append(r(1,raw.subarray(0,split)));m.append(r(2,raw.subarray(split)));assert.deepEqual(m.rows.map(x=>x.text),texts,rule+' at '+split);assert.deepEqual(Buffer.concat(m.rows.flatMap(x=>x.parts.map(p=>Buffer.from(p)))),raw);m.setNewline('none');assert.deepEqual(m.rows.map(x=>x.text),expected.none);}
+  const m=new LogModel('utf-8','batch');m.append(r(1,Buffer.from('A\r\n')));m.append(r(2,Buffer.from('B')));assert.deepEqual(m.rows.map(x=>x.text),['A␍␊','B']);
+});

@@ -6,3 +6,10 @@ assets/*.woff2
 *.jsonl
 .DS_Store
 Thumbs.db
+
+native/web/index.html
+native/web/app.js
+native/web/app.css
+native/web/*.woff2
+native/cmd/serial-assistant/*.syso
+native/web/THIRD_PARTY_NOTICES.txt

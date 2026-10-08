@@ -1,13 +1,13 @@
-name: Release v0.1.0
+name: Release v0.1.1
 on:
   push:
     branches: [main]
-    paths: [package.json, .github/workflows/release.yml]
+    paths: [package.json, 'native/**', 'src/renderer/**', 'scripts/build-native.cjs', .github/workflows/release.yml]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: release-v0.1.0
+  group: release-v0.1.1
   cancel-in-progress: false
 jobs:
   integration:
@@ -18,9 +18,18 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.1'
+          cache-dependency-path: native/go.sum
       - run: npm ci
       - run: npm test
-      - run: npm run test:pty
+      - run: npm run build
+      - name: Go concurrency and serial service tests
+        working-directory: native
+        run: go test -race ./internal/core
+      - name: Go kernel serial integration
+        run: python3 scripts/native-pty.py
   windows-release:
     needs: integration
     runs-on: windows-latest
@@ -32,43 +41,60 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - name: Verify version
-        run: node -e "if(require('./package.json').version!=='0.1.0')throw new Error('Version must be 0.1.0')"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.1'
+          cache-dependency-path: native/go.sum
       - run: npm ci
       - run: npm test
-      - run: npm run build
-      - name: Native Windows serial and desktop smoke test
-        run: |
-          node -e "require('serialport').SerialPort.list().then(p=>console.log('Native Windows enumeration:',p.length)).catch(e=>{console.error(e);process.exit(1)})"
-          node scripts/desktop-smoke.cjs
-      - name: Compile Windows installer and ZIP
-        run: npx electron-builder --win nsis zip --x64 --publish never --config.win.signAndEditExecutable=true
-      - name: Verify executable version and packaged files
+      - name: Go Windows backend tests
+        working-directory: native
+        run: go test ./internal/core
+      - name: Compile standalone EXE with embedded UI and font
+        run: npm run build:native
+      - name: Verify EXE version, size and real desktop startup
         shell: pwsh
         run: |
-          $info = (Get-Item 'release/win-unpacked/SerialAssistant.exe').VersionInfo
-          if ($info.ProductVersion -notlike '0.1.0*') { throw "Incorrect product version: $($info.ProductVersion)" }
-          if (!(Test-Path 'release/win-unpacked/resources/app.asar')) { throw 'Missing application archive' }
-          if (!(Test-Path 'release/win-unpacked/resources/app.asar.unpacked/node_modules/@serialport/bindings-cpp/prebuilds/win32-x64/@serialport+bindings-cpp.node')) { throw 'Missing Windows native serial binding' }
-      - run: npm run checksums
+          $exe = (Resolve-Path 'release/SerialAssistant-0.1.1-win-x64.exe').Path
+          $info = (Get-Item $exe).VersionInfo
+          if ($info.ProductVersion -notlike '0.1.1*') { throw "Wrong version: $($info.ProductVersion)" }
+          if ((Get-Item $exe).Length -gt 10MB) { throw 'Standalone EXE exceeds 10 MiB' }
+          $report = Join-Path $PWD 'release/desktop-validation.json'
+          $p = Start-Process $exe -ArgumentList @('--smoke-test', $report) -PassThru
+          if (!$p.WaitForExit(30000)) { $p.Kill(); throw 'Desktop startup timeout' }
+          if ($p.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Standalone desktop startup failed' }
+          $result = Get-Content $report -Raw | ConvertFrom-Json
+          if (!$result.fontReady -or !$result.layoutOK) { throw 'Embedded font/layout validation failed' }
+          Write-Host "Single-file native ready: $($result.readyMs) ms, $(Get-Item $exe | Select-Object -ExpandProperty Length) bytes"
+      - name: Create checksum
+        shell: pwsh
+        run: |
+          $exe = 'release/SerialAssistant-0.1.1-win-x64.exe'
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  SerialAssistant-0.1.1-win-x64.exe" | Set-Content 'release/SHA256SUMS.txt' -Encoding utf8
       - uses: actions/upload-artifact@v4
         with:
-          name: SerialAssistant-v0.1.0-Windows-x64
+          name: SerialAssistant-v0.1.1-Standalone-Windows-x64
           path: |
-            release/*.exe
-            release/*.zip
+            release/SerialAssistant-0.1.1-win-x64.exe
             release/SHA256SUMS.txt
+            release/desktop-validation.json
           if-no-files-found: error
-      - name: Publish v0.1.0
+      - name: Publish v0.1.1
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_COMMIT: ${{ github.sha }}
         run: |
-          $assets = @('release/SerialAssistant-Setup-0.1.0-win-x64.exe', 'release/SerialAssistant-0.1.0-win-x64.zip', 'release/SHA256SUMS.txt')
-          foreach ($asset in $assets) { if (!(Test-Path $asset)) { throw "Missing asset: $asset" } }
-          gh release create v0.1.0 @assets --target $env:RELEASE_COMMIT --title 'v0.1.0' --notes-file docs/releases/v0.1.0.md --draft
-          if ($LASTEXITCODE -ne 0) { throw 'Release creation/upload failed; existing release will not be overwritten' }
-          gh release edit v0.1.0 --draft=false
+          $assets = @('release/SerialAssistant-0.1.1-win-x64.exe', 'release/SHA256SUMS.txt')
+          $exeBytes = (Get-Item $assets[0]).Length
+          $validation = Get-Content 'release/desktop-validation.json' -Raw | ConvertFrom-Json
+          $sizeMiB = [Math]::Round($exeBytes / 1MB, 2)
+          $notes = Get-Content 'docs/releases/v0.1.1.md' -Raw
+          $notes += "`n`nWindows CI 验证：单文件 EXE $sizeMiB MiB（$exeBytes 字节）；界面与字体就绪耗时 $($validation.readyMs) ms。该时间仅代表 GitHub Windows runner，实际电脑启动速度因运行库缓存和硬件而异。`n"
+          $notes | Set-Content 'release/notes.md' -Encoding utf8
+          gh release create v0.1.1 @assets --target $env:RELEASE_COMMIT --title 'v0.1.1 · 轻量单文件 EXE' --notes-file release/notes.md --draft
+          if ($LASTEXITCODE -ne 0) { throw 'Release creation/upload failed; published releases are not overwritten' }
+          gh release edit v0.1.1 --draft=false
           if ($LASTEXITCODE -ne 0) { throw 'Release publishing failed' }
