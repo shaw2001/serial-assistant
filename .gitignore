@@ -13,3 +13,13 @@ native/web/app.css
 native/web/*.woff2
 native/cmd/serial-assistant/*.syso
 native/web/THIRD_PARTY_NOTICES.txt
+
+# Never commit local credentials or device captures
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+credentials*.json
+config.json

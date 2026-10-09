@@ -1,16 +1,19 @@
+> **安全更新：请使用 [v0.1.8](https://github.com/shaw2001/serial-assistant/releases/tag/v0.1.8)。v0.1.0–v0.1.7 已停止支持，旧下载将撤下。**
+> 默认关闭原始记录、草稿/历史落盘和自动更新；可在配置中明确开启。详见 [安全政策](SECURITY.md)。
+
 # 串口助手--完全Ai编写-GPT%Kimi
 
-本地多串口调试工具，浅色界面、OPPO Sans、紧凑快捷指令。v0.1.4 提供约 4.4 MiB 的单文件 Windows x64 EXE，双击运行。
+本地多串口调试工具，浅色界面、OPPO Sans、紧凑快捷指令。v0.1.8 提供约 8 MiB 的单文件 Windows x64 EXE，双击运行。
 
 ## 下载与使用
 
-从 [GitHub Releases](https://github.com/shaw2001/serial-assistant/releases) 下载 `SerialAssistant-0.1.4-win-x64.exe`，无需安装或解压。选择串口与波特率后连接。最多四个设备独立收发，指令只发送到当前标签。
+从 [GitHub Releases](https://github.com/shaw2001/serial-assistant/releases) 下载 `SerialAssistant-0.1.8-win-x64.exe`，无需安装或解压。选择串口与波特率后连接。最多四个设备独立收发，指令只发送到当前标签。
 
 已连接时修改波特率后，点击“应用并重连”；周期发送会停止，日志和其他设备保留。USB 串口需要其适配器驱动。
 
 ## 发送快捷键与 RTT 补全
 
-普通发送成功提交驱动后清空发送框，并保留发送历史；失败时保留原文。发送期间编辑的新内容和点击快捷指令时的草稿不会被清除。
+普通发送成功提交驱动后清空发送框，并在本次运行中保留发送历史；失败时保留原文。发送期间编辑的新内容和点击快捷指令时的草稿不会被清除。
 
 发送框中 **Enter 发送、Shift+Enter 换行**，兼容 Ctrl+Enter。中文输入法确认不会触发发送，发送过程中或按住按键不会重复提交。
 
@@ -22,7 +25,7 @@
 
 设备返回的数据可分包，并支持 ANSI 颜色码。等待补全回应期间可以编辑，暂缓下一次 Tab 或 Enter；未识别到提示符时保留输入并提示检查设备，不贸然发送。当前自动同步适配标准 RTT 提示符，自定义提示符需后续适配。设备断开重连不代表设备命令行已清空，必要时应重启设备。
 
-Shift+Tab 可离开发送框；HEX、其他控件和对话框保留正常 Tab 导航。多行输入用 Enter 发送，Tab 不提交其中的换行。设备关闭或重连只清除本地补全状态，不会自动执行或取消设备指令。
+Shift+Tab 可离开发送框；HEX、其他控件和对话框保留正常 Tab 导航。多行输入用 Enter 发送，Tab 不提交其中的换行。补全超时、取消或未完成时断开会标记输入状态未知，暂停发送；请清空设备输入行并点击确认后恢复。
 
 ## 接收显示
 
@@ -38,15 +41,15 @@ Windows 10 / 11 x64，Microsoft WebView2 Runtime。Windows 11 和多数 Windows 
 
 ## 从源码构建
 
-构建机需 Node.js 24、Go 1.26.1；首轮安装依赖和下载官方 OPPO Sans 需联网。字体下载有固定 SHA256 校验。
+构建机需 Node.js 24、Go 1.26.9；首轮安装依赖和下载官方 OPPO Sans 需联网。字体下载有固定 SHA256 校验。
 
 ```shell
-npm ci
+npm ci --ignore-scripts
 npm test
 npm run build:native
 ```
 
-生成 `release/SerialAssistant-0.1.4-win-x64.exe`，可在 Linux 交叉编译；实际 Windows 启动验证由 GitHub Actions 执行。构建脚本生成版本资源、DPI 清单，将界面和字体嵌入单文件。
+生成 `release/SerialAssistant-0.1.8-win-x64.exe`，可在 Linux 交叉编译；实际 Windows 启动验证由 GitHub Actions 执行。构建脚本生成版本资源、DPI 清单，将界面和字体嵌入单文件。
 
 ```shell
 cd native
@@ -63,8 +66,8 @@ python3 scripts/native-pty.py
 - `native/internal/core`：新 Go 串口服务、编码、配置、分段日志、导出。
 - `native/cmd/serial-assistant`：Win32 串口、WebView2 桌面窗口、文件对话框。
 - `native/web`：构建时生成并嵌入界面资源。
-- `src/main`、原有后端测试：v0.1.0 Node/Electron 行为参考；不进入 v0.1.4 成品。
+- `src/main`、原有后端测试：v0.1.0 Node/Electron 行为参考；不进入 v0.1.8 成品。
 
-发布流程先通过前端测试、Go 并发测试和内核串口集成，再在 Windows 编译并验证版本、成品体积、真实桌面启动、字体加载与布局后发布。v0.1.0 安装版和 ZIP 保留。
+发布流程先通过前端测试、Go 并发测试和内核串口集成，再在 Windows 编译并验证版本、成品体积、真实桌面启动、字体加载与布局后发布。旧版 Release、标签和匹配构建下载将在安全版发布后撤下。
 
 软件未使用签名证书。自动化检查不代替真实 USB 设备、长期满速、睡眠恢复与多种 DPI 的验收。TX 表示数据已提交驱动，不代表设备应答。第三方许可见 `THIRD_PARTY_NOTICES.md`。

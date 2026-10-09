@@ -147,3 +147,15 @@ test('normal sends clear submitted drafts, retain failed drafts and never erase 
     assert.deepEqual(h.errors,[]);
   }finally{h.close();}
 });
+
+test('completion timeout and Escape block all sends until explicit device-input confirmation',async()=>{
+ const h=await setup(),{el,press,change,writes,q}=h;
+ try{
+  h.auto(false);change(el('input'),'help','input');press('Tab');await new Promise(r=>setTimeout(r,3200));const count=writes.length;
+  assert(el('send').disabled);press('Enter');press('Tab');await tick();assert.equal(writes.length,count,'timeout must not duplicate the device prefix');
+  q('[data-command-send]').click();assert.equal(writes.length,count);
+  q('[data-action="recover-input"]').click();q('[data-action="confirm-input-cleared"]').click();await tick();press('Enter');await tick();assert.equal(writes.length,count+1);
+  change(el('input'),'he','input');press('Tab');await tick();press('Escape');press('Enter');await tick();assert.equal(writes.length,count+2,'Escape must not silently re-enable sending');
+  assert(h.saved.at(-1).devices[0].inputUncertain);assert.equal(h.saved.at(-1).devices[0].draft.content,'');assert.equal(h.saved.at(-1).devices[0].history.length,0);
+ }finally{h.close()}
+});

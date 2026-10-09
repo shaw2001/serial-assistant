@@ -69,10 +69,10 @@ func TestParseRelease(t *testing.T) {
 
 func TestParseReleaseRejectsBadPayloads(t *testing.T) {
 	for name, body := range map[string]string{
-		"broken":  `{"tag_name":`,
-		"empty":   `{}`,
-		"draft":   `{"tag_name":"v9.9.9","draft":true,"prerelease":true}`,
-		"notag":   `{"name":"no tag"}`,
+		"broken": `{"tag_name":`,
+		"empty":  `{}`,
+		"draft":  `{"tag_name":"v9.9.9","draft":true,"prerelease":true}`,
+		"notag":  `{"name":"no tag"}`,
 	} {
 		if _, e := ParseRelease([]byte(body)); e == nil {
 			t.Fatalf("%s payload should fail", name)

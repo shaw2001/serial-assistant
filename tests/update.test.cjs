@@ -1,7 +1,8 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs/promises');
 const {JSDOM}=require('jsdom'),{build}=require('esbuild');
-const {defaults}=require('../src/main/config.cjs');
+const {defaults:baseDefaults}=require('../src/main/config.cjs');
+const defaults=()=>({...baseDefaults(),ui:{privacyVersion:1,autoUpdate:true}});
 
 test('update check announces a new release, opens GitHub and remembers the ignored tag',async()=>{
   const bundle=await build({entryPoints:['src/renderer/app.mjs'],bundle:true,write:false,platform:'browser',format:'iife'});

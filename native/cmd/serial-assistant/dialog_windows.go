@@ -4,8 +4,8 @@ package main
 
 import (
 	"fmt"
-	webview "github.com/jchv/go-webview2"
 	"golang.org/x/sys/windows"
+	webview "io.github.shaw2001/serialassistant/internal/webview"
 	"unicode/utf16"
 	"unsafe"
 )

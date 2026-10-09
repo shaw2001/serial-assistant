@@ -223,3 +223,8 @@ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+## Security-maintained WebView wrapper
+
+`native/internal/webview` contains the MIT-licensed Go WebView2 wrapper from github.com/jchv/go-webview2 at 56598839c808, modified for origin validation, navigation restrictions and permission denial. Original copyright and license are preserved in native/internal/webview/LICENSE.

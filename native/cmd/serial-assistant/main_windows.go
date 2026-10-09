@@ -10,13 +10,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	webview "github.com/jchv/go-webview2"
 	"github.com/jchv/go-webview2/webviewloader"
 	"go.bug.st/serial/enumerator"
 	"golang.org/x/sys/windows"
 	"io.github.shaw2001/serialassistant/internal/core"
+	webview "io.github.shaw2001/serialassistant/internal/webview"
 	"io.github.shaw2001/serialassistant/web"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -45,6 +44,7 @@ func alert(s string) {
 }
 
 type request struct {
+	Token  string            `json:"token"`
 	ID     int               `json:"id"`
 	Method string            `json:"method"`
 	Args   []json.RawMessage `json:"args"`
@@ -89,6 +89,12 @@ func main() {
 		}
 		return
 	}
+	key := make([]byte, 32)
+	if _, e = rand.Read(key); e != nil {
+		alert("无法初始化安全会话。")
+		return
+	}
+	bridgeToken := hex.EncodeToString(key)
 	w := webview.NewWithOptions(webview.WebViewOptions{DataPath: filepath.Join(dir, "WebView2"), AutoFocus: true, WindowOptions: webview.WindowOptions{Title: "串口助手 · v" + version, Width: 1220, Height: 860}})
 	if w == nil {
 		alert("窗口初始化失败。")
@@ -240,7 +246,11 @@ func main() {
 			if e != nil || file == "" {
 				return map[string]any{"canceled": true}, e
 			}
-			e = core.AtomicWrite(file, r.Args[0])
+			safe, err := core.ConfigBytes(r.Args[0], true)
+			if err != nil {
+				return nil, err
+			}
+			e = core.AtomicWrite(file, safe)
 			return map[string]any{"canceled": false, "path": file}, e
 		case "exportLog":
 			o, e := arg[core.ExportOptions](r, 0)
@@ -265,6 +275,16 @@ func main() {
 			return nil, nil
 		case "checkUpdate":
 			force, _ := arg[bool](r, 0)
+			if !force {
+				data, err := os.ReadFile(filepath.Join(dir, "config.json"))
+				if err != nil {
+					return map[string]any{"skipped": true}, nil
+				}
+				cfg, err := core.DecodeConfig(data)
+				if err != nil || !cfg.UI.AutoUpdate {
+					return map[string]any{"skipped": true}, nil
+				}
+			}
 			stateFile := filepath.Join(dir, "update-check.json")
 			state := core.LoadUpdateState(stateFile)
 			if !force && !core.ShouldCheck(state, time.Now(), 24*time.Hour) {
@@ -283,8 +303,7 @@ func main() {
 			if e != nil {
 				return nil, e
 			}
-			parsed, e := url.Parse(target)
-			if e != nil || parsed.Scheme != "https" || !strings.HasSuffix(strings.ToLower(parsed.Hostname()), "github.com") {
+			if !core.ValidReleaseURL(target) {
 				return nil, errors.New("仅允许打开 GitHub 链接。")
 			}
 			result, _, _ := shellExecute.Call(uintptr(w.Window()), uintptr(unsafe.Pointer(wide("open"))), uintptr(unsafe.Pointer(wide(target))), 0, 0, 1)
@@ -318,6 +337,17 @@ func main() {
 				return nil, e
 			}
 			if smoke {
+				if data["securityProbe"] != true {
+					initial, _ := json.Marshal(data)
+					w.Dispatch(func() {
+						w.Eval(`(async()=>{let rejected=false;try{await window.__enqueue({id:999999,method:'initialize',args:[],token:'invalid'})}catch{rejected=true}const meta=document.createElement('meta');meta.httpEquiv='refresh';meta.content='0;url=https://security-probe.invalid/';document.head.appendChild(meta);setTimeout(()=>window.serialAPI.ready({...` + string(initial) + `,securityProbe:true,unauthorizedRejected:rejected}),500)})()`)
+					})
+					return nil, nil
+				}
+				if w.BlockedNavigations() == 0 || data["unauthorizedRejected"] != true {
+					return nil, errors.New("原生页面安全检查失败。")
+				}
+				data["blockedNavigations"] = w.BlockedNavigations()
 				data["readyMs"] = time.Since(started).Milliseconds()
 				data["runtime"] = "Go + WebView2"
 				if data["version"] != version || data["fontReady"] != true || data["layoutOK"] != true {
@@ -339,11 +369,23 @@ func main() {
 			return nil, errors.New("未知操作。")
 		}
 	}
+	requests := make(chan struct{}, 32)
 	_ = w.Bind("__enqueue", func(r request) error {
+		if r.Token != bridgeToken {
+			return errors.New("页面调用未授权。")
+		}
+		select {
+		case requests <- struct{}{}:
+		default:
+			return errors.New("调用过于频繁。")
+		}
+
 		if len(r.Args) > 4 || r.ID < 1 {
+			<-requests
 			return errors.New("调用无效。")
 		}
 		go func() {
+			defer func() { <-requests }()
 			result, e := invoke(r)
 			response := map[string]any{"ok": e == nil, "value": result}
 			if e != nil {
@@ -360,7 +402,10 @@ func main() {
 	font, _ := web.Assets.ReadFile("OPPOSans-Regular.woff2")
 	bridge, _ := web.Assets.ReadFile("bridge.js")
 	nonceData := make([]byte, 16)
-	_, _ = rand.Read(nonceData)
+	if _, e = rand.Read(nonceData); e != nil {
+		alert("无法初始化安全页面。")
+		return
+	}
 	nonce := hex.EncodeToString(nonceData)
 	html := string(htmlBytes)
 	start := strings.Index(html, "<meta http-equiv=\"Content-Security-Policy\"")
@@ -369,7 +414,7 @@ func main() {
 	html = html[:start] + policy + html[end+1:]
 	cssText := strings.ReplaceAll(string(css), "OPPOSans-Regular.woff2", "data:font/woff2;base64,"+base64.StdEncoding.EncodeToString(font))
 	html = strings.Replace(html, `<link rel="stylesheet" href="app.css">`, "<style>"+cssText+"</style>", 1)
-	html = strings.Replace(html, `<script src="app.js"></script>`, `<script nonce="`+nonce+`">`+string(bridge)+"\n"+strings.ReplaceAll(string(js), "</script", "<\\/script")+`</script>`, 1)
+	html = strings.Replace(html, `<script src="app.js"></script>`, `<script nonce="`+nonce+`">`+strings.Replace(string(bridge), "__BRIDGE_TOKEN__", bridgeToken, 1)+"\n"+strings.ReplaceAll(string(js), "</script", "<\\/script")+`</script>`, 1)
 	w.SetHtml(html)
 	if smoke {
 		go func() {

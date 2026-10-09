@@ -1,100 +1,125 @@
-name: Release v0.1.7
+name: Release v0.1.8 security update
 on:
   push:
     branches: [main]
-    paths: [package.json, 'native/**', 'src/renderer/**', 'scripts/build-native.cjs', .github/workflows/release.yml]
+    paths: [package.json, package-lock.json, 'native/**', 'src/renderer/**', 'scripts/**', .github/workflows/release.yml]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: release-v0.1.7
+  group: release-v0.1.8
   cancel-in-progress: false
 jobs:
   integration:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
           cache: npm
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
-          go-version: '1.26.1'
+          go-version: '1.26.9'
           cache-dependency-path: native/go.sum
-      - run: npm ci
+      - run: npm ci --ignore-scripts
+      - run: npm audit --audit-level=low
       - run: npm test
       - run: npm run build
-      - name: Go concurrency and serial service tests
+      - name: Go race and security regression tests
         working-directory: native
         run: go test -race ./internal/core
-      - name: Go kernel serial integration
-        run: python3 scripts/native-pty.py
-  windows-release:
+      - run: python3 scripts/native-pty.py
+      - name: Windows source vulnerability gate
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          cp dist/* native/web/
+          cp THIRD_PARTY_NOTICES.md native/web/THIRD_PARTY_NOTICES.txt
+          cd native
+          GOOS=windows GOARCH=amd64 govulncheck ./...
+      - name: Scan complete Git history for secrets
+        run: |
+          go install github.com/zricethezav/gitleaks/v8@v8.30.1
+          gitleaks git --redact --log-opts=--all .
+  windows-build:
     needs: integration
     runs-on: windows-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
           cache: npm
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
-          go-version: '1.26.1'
+          go-version: '1.26.9'
           cache-dependency-path: native/go.sum
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm test
-      - name: Go Windows backend tests
+      - run: go test ./internal/core
         working-directory: native
-        run: go test ./internal/core
-      - name: Compile standalone EXE with embedded UI and font
-        run: npm run build:native
-      - name: Verify EXE version, size and real desktop startup
+      - run: npm run build:native
+      - name: Verify actual Windows startup and WebView security boundaries
         shell: pwsh
         run: |
-          $exe = (Resolve-Path 'release/SerialAssistant-0.1.7-win-x64.exe').Path
-          $info = (Get-Item $exe).VersionInfo
-          if ($info.ProductVersion -notlike '0.1.7*') { throw "Wrong version: $($info.ProductVersion)" }
-          if ((Get-Item $exe).Length -gt 10MB) { throw 'Standalone EXE exceeds 10 MiB' }
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $exe = (Resolve-Path "release/SerialAssistant-$version-win-x64.exe").Path
+          if ((Get-Item $exe).VersionInfo.ProductVersion -notlike "$version*") { throw 'Wrong version' }
+          if ((Get-Item $exe).Length -gt 10MB) { throw 'EXE exceeds 10 MiB' }
           $report = Join-Path $PWD 'release/desktop-validation.json'
           $p = Start-Process $exe -ArgumentList @('--smoke-test', $report) -PassThru
           if (!$p.WaitForExit(30000)) { $p.Kill(); throw 'Desktop startup timeout' }
-          if ($p.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Standalone desktop startup failed' }
+          if ($p.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Desktop security validation failed' }
           $result = Get-Content $report -Raw | ConvertFrom-Json
-          if (!$result.fontReady -or !$result.layoutOK) { throw 'Embedded font/layout validation failed' }
-          Write-Host "Single-file native ready: $($result.readyMs) ms, $(Get-Item $exe | Select-Object -ExpandProperty Length) bytes"
-      - name: Create checksum
-        shell: pwsh
-        run: |
-          $exe = 'release/SerialAssistant-0.1.7-win-x64.exe'
-          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  SerialAssistant-0.1.7-win-x64.exe" | Set-Content 'release/SHA256SUMS.txt' -Encoding utf8
-      - uses: actions/upload-artifact@v4
+          if (!$result.fontReady -or !$result.layoutOK -or !$result.unauthorizedRejected -or $result.blockedNavigations -lt 1) { throw 'Security, font or layout check failed' }
+      - run: npm run checksums
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: SerialAssistant-v0.1.7-Standalone-Windows-x64
-          path: |
-            release/SerialAssistant-0.1.7-win-x64.exe
-            release/SHA256SUMS.txt
-            release/desktop-validation.json
+          name: SerialAssistant-v0.1.8-Standalone-Windows-x64
+          path: release/*
           if-no-files-found: error
-      - name: Publish v0.1.7
-        shell: pwsh
+          retention-days: 7
+  publish:
+    needs: windows-build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: SerialAssistant-v0.1.8-Standalone-Windows-x64
+          path: release
+      - name: Verify artifact checksum and publish fixed release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_COMMIT: ${{ github.sha }}
         run: |
-          $assets = @('release/SerialAssistant-0.1.7-win-x64.exe', 'release/SHA256SUMS.txt')
-          $exeBytes = (Get-Item $assets[0]).Length
-          $validation = Get-Content 'release/desktop-validation.json' -Raw | ConvertFrom-Json
-          $sizeMiB = [Math]::Round($exeBytes / 1MB, 2)
-          $notes = Get-Content 'docs/releases/v0.1.7.md' -Raw
-          $notes += "`n`nWindows CI 验证：单文件 EXE $sizeMiB MiB（$exeBytes 字节）；界面与字体就绪耗时 $($validation.readyMs) ms。该时间仅代表 GitHub Windows runner，实际电脑启动速度因运行库缓存和硬件而异。`n"
-          $notes | Set-Content 'release/notes.md' -Encoding utf8
-          gh release create v0.1.7 @assets --target $env:RELEASE_COMMIT --title 'v0.1.7 · 在线更新检查' --notes-file release/notes.md --draft
-          if ($LASTEXITCODE -ne 0) { throw 'Release creation/upload failed; published releases are not overwritten' }
-          gh release edit v0.1.7 --draft=false
-          if ($LASTEXITCODE -ne 0) { throw 'Release publishing failed' }
+          cd release
+          sha256sum --check SHA256SUMS.txt
+          cd ..
+          gh release create v0.1.8 release/SerialAssistant-0.1.8-win-x64.exe release/SHA256SUMS.txt --target "$RELEASE_COMMIT" --title 'v0.1.8 · 安全修复' --notes-file docs/releases/v0.1.8.md --draft
+          gh release edit v0.1.8 --draft=false --latest
+  retire-vulnerable-downloads:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Remove explicitly retired releases, tags and matching build downloads
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/retire-vulnerable-releases.cjs

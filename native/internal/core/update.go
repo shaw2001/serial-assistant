@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -90,10 +92,10 @@ func ParseRelease(data []byte) (UpdateInfo, error) {
 		return UpdateInfo{}, errors.New("GitHub 返回的版本信息无法解析。")
 	}
 	tag := strings.TrimSpace(r.TagName)
-	if tag == "" || (r.Draft && r.Prerelease) {
+	if !releaseTag.MatchString(tag) || r.Draft || r.Prerelease {
 		return UpdateInfo{}, errors.New("GitHub 未返回可用版本。")
 	}
-	info := UpdateInfo{Latest: tag, Name: strings.TrimSpace(r.Name), URL: r.HTMLURL, Published: r.PublishedAt, Checked: true}
+	info := UpdateInfo{Latest: tag, Name: strings.TrimSpace(r.Name), URL: "https://github.com/shaw2001/serial-assistant/releases/tag/" + tag, Published: r.PublishedAt, Checked: true}
 	if info.URL == "" {
 		info.URL = "https://github.com/shaw2001/serial-assistant/releases/latest"
 	}
@@ -114,7 +116,7 @@ func FetchRelease(ctx context.Context, client *http.Client, repo, current string
 
 func fetchRelease(ctx context.Context, client *http.Client, endpoint, current string) (UpdateInfo, error) {
 	if client == nil {
-		client = &http.Client{Timeout: 6 * time.Second}
+		client = &http.Client{Timeout: 6 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return errors.New("更新检查不允许重定向。") }}
 	}
 	req, e := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if e != nil {
@@ -177,3 +179,19 @@ func SaveUpdateState(file string, s UpdateState) error {
 func ShouldCheck(s UpdateState, now time.Time, interval time.Duration) bool {
 	return s.LastCheck.IsZero() || now.Sub(s.LastCheck) >= interval
 }
+
+// Only the application's official HTTPS release pages may leave the app.
+func ValidReleaseURL(target string) bool {
+	u, e := url.Parse(target)
+	if e != nil || u.Scheme != "https" || u.Host != "github.com" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.RawPath != "" {
+		return false
+	}
+	const prefix = "/shaw2001/serial-assistant/releases/"
+	if u.Path == prefix+"latest" {
+		return true
+	}
+	tag := strings.TrimPrefix(u.Path, prefix+"tag/")
+	return u.Path != tag && releaseTag.MatchString(tag)
+}
+
+var releaseTag = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)

@@ -28,6 +28,9 @@ func NewJournal(dir, id string) (*Journal, error) {
 	if e := os.MkdirAll(dir, 0700); e != nil {
 		return nil, e
 	}
+	if e := refreshJournalQuota(dir); e != nil {
+		return nil, e
+	}
 	j := &Journal{queue: make(chan []byte, 2048), done: make(chan struct{}), directory: dir, id: id}
 	go j.run()
 	return j, nil
@@ -52,6 +55,7 @@ func (j *Journal) Append(r Record) bool {
 }
 func (j *Journal) run() {
 	defer close(j.done)
+	defer releaseJournalQuota(j.directory)
 	var f *os.File
 	var w *bufio.Writer
 	var total int
@@ -102,7 +106,7 @@ func (j *Journal) run() {
 				j.files = append(j.files, name)
 				j.mu.Unlock()
 			}
-			if _, e := w.Write(data); e != nil {
+			if e := writeJournalBytes(j.directory, data, w.Write); e != nil {
 				j.fail(e)
 				continue
 			}

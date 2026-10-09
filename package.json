@@ -1,7 +1,7 @@
 {
   "name": "serial-assistant",
   "productName": "SerialAssistant",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "离线多串口调试助手，支持文本、HEX、快捷指令和无损日志",
   "author": "shaw2001",
   "license": "UNLICENSED",
@@ -22,7 +22,7 @@
     "serialport": "13.0.0"
   },
   "devDependencies": {
-    "esbuild": "0.27.4",
+    "esbuild": "0.28.2",
     "jsdom": "26.1.0"
   }
 }
