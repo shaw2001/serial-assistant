@@ -348,6 +348,7 @@ func main() {
 				return nil, e
 			}
 			if smoke {
+				log.Printf("ready probe=%v version=%v font=%v layout=%v blocked=%d unauthorized=%v", data["securityProbe"], data["version"], data["fontReady"], data["layoutOK"], w.BlockedNavigations(), data["unauthorizedRejected"])
 				if data["securityProbe"] != true {
 					initial, _ := json.Marshal(data)
 					w.Dispatch(func() {
