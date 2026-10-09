@@ -28,7 +28,7 @@ import (
 )
 
 // version is injected at build time: -ldflags "-X main.version=1.2.3"
-var version = "0.1.0"
+var version = "0.2.0"
 
 const releaseRepo = "shaw2001/serial-assistant"
 
