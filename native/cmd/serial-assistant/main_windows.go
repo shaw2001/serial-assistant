@@ -15,7 +15,9 @@ import (
 	"golang.org/x/sys/windows"
 	"io.github.shaw2001/serialassistant/internal/core"
 	webview "io.github.shaw2001/serialassistant/internal/webview"
+	"io.github.shaw2001/serialassistant/internal/webview/pkg/edge"
 	"io.github.shaw2001/serialassistant/web"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -65,6 +67,15 @@ func main() {
 	report := ""
 	if smoke && len(os.Args) > 2 {
 		report = os.Args[2]
+	}
+	if smoke && report != "" {
+		f, e := os.Create(report + ".trace")
+		if e == nil {
+			defer f.Close()
+			log.SetOutput(f)
+			edge.SecurityTrace = log.Printf
+			log.Print("smoke starting")
+		}
 	}
 	configBase, e := os.UserConfigDir()
 	if e != nil {
@@ -371,6 +382,9 @@ func main() {
 	}
 	requests := make(chan struct{}, 32)
 	_ = w.Bind("__enqueue", func(r request) error {
+		if smoke {
+			log.Printf("request method=%s authenticated=%t", r.Method, r.Token == bridgeToken)
+		}
 		if r.Token != bridgeToken {
 			return errors.New("页面调用未授权。")
 		}
@@ -387,6 +401,9 @@ func main() {
 		go func() {
 			defer func() { <-requests }()
 			result, e := invoke(r)
+			if smoke && e != nil {
+				log.Printf("request error %s: %v", r.Method, e)
+			}
 			response := map[string]any{"ok": e == nil, "value": result}
 			if e != nil {
 				response["error"] = e.Error()
@@ -415,6 +432,9 @@ func main() {
 	cssText := strings.ReplaceAll(string(css), "OPPOSans-Regular.woff2", "data:font/woff2;base64,"+base64.StdEncoding.EncodeToString(font))
 	html = strings.Replace(html, `<link rel="stylesheet" href="app.css">`, "<style>"+cssText+"</style>", 1)
 	html = strings.Replace(html, `<script src="app.js"></script>`, `<script nonce="`+nonce+`">`+strings.Replace(string(bridge), "__BRIDGE_TOKEN__", bridgeToken, 1)+"\n"+strings.ReplaceAll(string(js), "</script", "<\\/script")+`</script>`, 1)
+	if smoke {
+		log.Print("setting HTML")
+	}
 	w.SetHtml(html)
 	if smoke {
 		go func() {

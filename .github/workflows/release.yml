@@ -45,7 +45,6 @@ jobs:
           go install github.com/zricethezav/gitleaks/v8@v8.30.1
           gitleaks git --redact --log-opts=--all .
   windows-build:
-    needs: integration
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -74,7 +73,8 @@ jobs:
           $report = Join-Path $PWD 'release/desktop-validation.json'
           $p = Start-Process $exe -ArgumentList @('--smoke-test', $report) -PassThru
           if (!$p.WaitForExit(30000)) { $p.Kill(); throw 'Desktop startup timeout' }
-          if ($p.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Desktop security validation failed' }
+          if (Test-Path "$report.trace") { Get-Content "$report.trace" | Select-Object -Last 60 }
+          if ($p.ExitCode -ne 0 -or !(Test-Path $report)) { throw "Desktop security validation failed: exit=$($p.ExitCode)" }
           $result = Get-Content $report -Raw | ConvertFrom-Json
           if (!$result.fontReady -or !$result.layoutOK -or !$result.unauthorizedRejected -or $result.blockedNavigations -lt 1) { throw 'Security, font or layout check failed' }
       - run: npm run checksums
@@ -85,7 +85,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   publish:
-    needs: windows-build
+    needs: [integration, windows-build]
     runs-on: ubuntu-latest
     permissions:
       contents: write

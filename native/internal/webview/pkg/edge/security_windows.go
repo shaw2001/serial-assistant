@@ -8,6 +8,14 @@ import (
 	"unsafe"
 )
 
+var SecurityTrace func(string, ...any)
+
+func securityTrace(format string, args ...any) {
+	if SecurityTrace != nil {
+		SecurityTrace(format, args...)
+	}
+}
+
 // COM layout matches ICoreWebView2NavigationStartingEventArgs.
 type securityNavigationArgs struct {
 	vtbl *struct {
@@ -39,6 +47,7 @@ func newSecurityNavigationHandler(e *Chromium) *securityNavigationHandler {
 		var uri *uint16
 		hr, _, _ := a.vtbl.GetURI.Call(uintptr(unsafe.Pointer(a)), uintptr(unsafe.Pointer(&uri)))
 		target := w32.Utf16PtrToString(uri)
+		securityTrace("navigation uri=%q hr=%x allow=%t loaded=%t", target, hr, h.browser.allowDocument, h.browser.documentLoaded)
 		windows.CoTaskMemFree(unsafe.Pointer(uri))
 		if int32(hr) >= 0 && h.browser.allowDocument && !h.browser.documentLoaded && target == "about:blank" {
 			h.browser.allowDocument = false
@@ -58,6 +67,7 @@ func (e *Chromium) trustedDocument() bool {
 	var uri *uint16
 	hr, _, _ := e.webview.vtbl.GetSource.Call(uintptr(unsafe.Pointer(e.webview)), uintptr(unsafe.Pointer(&uri)))
 	source := w32.Utf16PtrToString(uri)
+	securityTrace("source=%q hr=%x loaded=%t", source, hr, e.documentLoaded)
 	windows.CoTaskMemFree(unsafe.Pointer(uri))
 	return int32(hr) >= 0 && source == "about:blank"
 }

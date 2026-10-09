@@ -129,6 +129,7 @@ func (e *Chromium) Navigate(url string) {
 }
 
 func (e *Chromium) NavigateToString(htmlContent string) {
+	securityTrace("NavigateToString loaded=%t length=%d", e.documentLoaded, len(htmlContent))
 	if e.documentLoaded {
 		return
 	}
@@ -259,12 +260,14 @@ func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller
 }
 
 func (e *Chromium) MessageReceived(sender *ICoreWebView2, args *iCoreWebView2WebMessageReceivedEventArgs) uintptr {
+	securityTrace("web message received loaded=%t", e.documentLoaded)
 	if !e.trustedDocument() {
 		return 0
 	}
 	var source *uint16
 	hr, _, _ := args.vtbl.GetSource.Call(uintptr(unsafe.Pointer(args)), uintptr(unsafe.Pointer(&source)))
 	origin := w32.Utf16PtrToString(source)
+	securityTrace("message source=%q hr=%x", origin, hr)
 	windows.CoTaskMemFree(unsafe.Pointer(source))
 	if int32(hr) < 0 || origin != "about:blank" {
 		return 0
