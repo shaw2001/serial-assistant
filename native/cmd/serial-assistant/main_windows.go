@@ -73,7 +73,12 @@ func main() {
 		if e == nil {
 			defer f.Close()
 			log.SetOutput(f)
-			edge.SecurityTrace = log.Printf
+			var traceCount atomic.Uint32
+			edge.SecurityTrace = func(format string, args ...any) {
+				if traceCount.Add(1) <= 200 {
+					log.Printf(format, args...)
+				}
+			}
 			log.Print("smoke starting")
 		}
 	}
@@ -378,7 +383,7 @@ func main() {
 	}
 	requests := make(chan struct{}, 32)
 	_ = w.Bind("__enqueue", func(r request) error {
-		if smoke {
+		if smoke && r.Method != "poll" {
 			log.Printf("request method=%s authenticated=%t", r.Method, r.Token == bridgeToken)
 		}
 		if r.Token != bridgeToken {

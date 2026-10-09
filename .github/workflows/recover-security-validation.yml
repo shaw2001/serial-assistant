@@ -17,8 +17,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           test "$GH_REPO" = 'shaw2001/serial-assistant'
-          run_json=$(gh api "repos/$GH_REPO/actions/runs/37892971052")
-          test "$(echo "$run_json" | jq -r .head_sha)" = '8d3ea884aac2df71728bfef22be28ac4e3532643'
+          run_json=$(gh api "repos/$GH_REPO/actions/runs/37893877499")
+          test "$(echo "$run_json" | jq -r .head_sha)" = '264fd536049fbb2e087b53879743d9bab50dce5c'
           if test "$(echo "$run_json" | jq -r .status)" = 'in_progress'; then
-            gh api "repos/$GH_REPO/actions/runs/37892971052/force-cancel" --method POST
+            gh api "repos/$GH_REPO/actions/runs/37893877499/force-cancel" --method POST
           fi

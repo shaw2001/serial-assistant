@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: security-release-v0.1.8-verified
+  group: security-release-v0.1.8-final
   cancel-in-progress: true
 jobs:
   integration:
@@ -45,7 +45,8 @@ jobs:
           go install github.com/zricethezav/gitleaks/v8@v8.30.1
           gitleaks git --redact --log-opts=--all .
   windows-build:
-    runs-on: windows-latest
+    runs-on: windows-2022
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
