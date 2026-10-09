@@ -1,4 +1,4 @@
-name: Release v0.1.6
+name: Release v0.1.7
 on:
   push:
     branches: [main]
@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: release-v0.1.6
+  group: release-v0.1.7
   cancel-in-progress: false
 jobs:
   integration:
@@ -55,9 +55,9 @@ jobs:
       - name: Verify EXE version, size and real desktop startup
         shell: pwsh
         run: |
-          $exe = (Resolve-Path 'release/SerialAssistant-0.1.6-win-x64.exe').Path
+          $exe = (Resolve-Path 'release/SerialAssistant-0.1.7-win-x64.exe').Path
           $info = (Get-Item $exe).VersionInfo
-          if ($info.ProductVersion -notlike '0.1.6*') { throw "Wrong version: $($info.ProductVersion)" }
+          if ($info.ProductVersion -notlike '0.1.7*') { throw "Wrong version: $($info.ProductVersion)" }
           if ((Get-Item $exe).Length -gt 10MB) { throw 'Standalone EXE exceeds 10 MiB' }
           $report = Join-Path $PWD 'release/desktop-validation.json'
           $p = Start-Process $exe -ArgumentList @('--smoke-test', $report) -PassThru
@@ -69,32 +69,32 @@ jobs:
       - name: Create checksum
         shell: pwsh
         run: |
-          $exe = 'release/SerialAssistant-0.1.6-win-x64.exe'
+          $exe = 'release/SerialAssistant-0.1.7-win-x64.exe'
           $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  SerialAssistant-0.1.6-win-x64.exe" | Set-Content 'release/SHA256SUMS.txt' -Encoding utf8
+          "$hash  SerialAssistant-0.1.7-win-x64.exe" | Set-Content 'release/SHA256SUMS.txt' -Encoding utf8
       - uses: actions/upload-artifact@v4
         with:
-          name: SerialAssistant-v0.1.6-Standalone-Windows-x64
+          name: SerialAssistant-v0.1.7-Standalone-Windows-x64
           path: |
-            release/SerialAssistant-0.1.6-win-x64.exe
+            release/SerialAssistant-0.1.7-win-x64.exe
             release/SHA256SUMS.txt
             release/desktop-validation.json
           if-no-files-found: error
-      - name: Publish v0.1.6
+      - name: Publish v0.1.7
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_COMMIT: ${{ github.sha }}
         run: |
-          $assets = @('release/SerialAssistant-0.1.6-win-x64.exe', 'release/SHA256SUMS.txt')
+          $assets = @('release/SerialAssistant-0.1.7-win-x64.exe', 'release/SHA256SUMS.txt')
           $exeBytes = (Get-Item $assets[0]).Length
           $validation = Get-Content 'release/desktop-validation.json' -Raw | ConvertFrom-Json
           $sizeMiB = [Math]::Round($exeBytes / 1MB, 2)
-          $notes = Get-Content 'docs/releases/v0.1.6.md' -Raw
+          $notes = Get-Content 'docs/releases/v0.1.7.md' -Raw
           $notes += "`n`nWindows CI 验证：单文件 EXE $sizeMiB MiB（$exeBytes 字节）；界面与字体就绪耗时 $($validation.readyMs) ms。该时间仅代表 GitHub Windows runner，实际电脑启动速度因运行库缓存和硬件而异。`n"
           $notes | Set-Content 'release/notes.md' -Encoding utf8
-          gh release create v0.1.6 @assets --target $env:RELEASE_COMMIT --title 'v0.1.6 · 日志区空间最大化' --notes-file release/notes.md --draft
+          gh release create v0.1.7 @assets --target $env:RELEASE_COMMIT --title 'v0.1.7 · 在线更新检查' --notes-file release/notes.md --draft
           if ($LASTEXITCODE -ne 0) { throw 'Release creation/upload failed; published releases are not overwritten' }
-          gh release edit v0.1.6 --draft=false
+          gh release edit v0.1.7 --draft=false
           if ($LASTEXITCODE -ne 0) { throw 'Release publishing failed' }

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -15,6 +16,7 @@ import (
 	"golang.org/x/sys/windows"
 	"io.github.shaw2001/serialassistant/internal/core"
 	"io.github.shaw2001/serialassistant/web"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,7 +26,10 @@ import (
 	"unsafe"
 )
 
-const version = "0.1.4"
+// version is injected at build time: -ldflags "-X main.version=1.2.3"
+var version = "0.1.0"
+
+const releaseRepo = "shaw2001/serial-assistant"
 
 var user32 = windows.NewLazySystemDLL("user32.dll")
 var messageBox = user32.NewProc("MessageBoxW")
@@ -256,6 +261,35 @@ func main() {
 			result, _, _ := shellExecute.Call(uintptr(w.Window()), uintptr(unsafe.Pointer(wide("open"))), uintptr(unsafe.Pointer(wide(path))), 0, 0, 1)
 			if result <= 32 {
 				return nil, errors.New("无法打开日志目录。")
+			}
+			return nil, nil
+		case "checkUpdate":
+			force, _ := arg[bool](r, 0)
+			stateFile := filepath.Join(dir, "update-check.json")
+			state := core.LoadUpdateState(stateFile)
+			if !force && !core.ShouldCheck(state, time.Now(), 24*time.Hour) {
+				return map[string]any{"current": version, "checked": false, "skipped": true}, nil
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+			defer cancel()
+			info, e := core.FetchRelease(ctx, nil, releaseRepo, version)
+			if e != nil {
+				return nil, e
+			}
+			_ = core.SaveUpdateState(stateFile, core.UpdateState{LastCheck: time.Now()})
+			return info, nil
+		case "openExternal":
+			target, e := arg[string](r, 0)
+			if e != nil {
+				return nil, e
+			}
+			parsed, e := url.Parse(target)
+			if e != nil || parsed.Scheme != "https" || !strings.HasSuffix(strings.ToLower(parsed.Hostname()), "github.com") {
+				return nil, errors.New("仅允许打开 GitHub 链接。")
+			}
+			result, _, _ := shellExecute.Call(uintptr(w.Window()), uintptr(unsafe.Pointer(wide("open"))), uintptr(unsafe.Pointer(wide(target))), 0, 0, 1)
+			if result <= 32 {
+				return nil, errors.New("无法打开浏览器。")
 			}
 			return nil, nil
 		case "setAlwaysOnTop":
