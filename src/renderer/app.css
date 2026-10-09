@@ -133,7 +133,7 @@ body{margin:0;background:#eceef1}
 
 #sui2 .su-session-bar{
   flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  background:var(--su-bg);padding:0 14px;border-bottom:1px solid var(--su-border);
+  background:var(--su-surface);padding:5px 14px;border-bottom:1px solid var(--su-border);
 }
 #sui2 .su-tabs{display:flex;flex-wrap:wrap;gap:2px;min-width:0}
 #sui2 .su-tab-wrap{display:flex;align-items:center;border-bottom:2px solid transparent;padding:3px 2px}
@@ -151,25 +151,28 @@ body{margin:0;background:#eceef1}
 }
 #sui2 .su-tab-close:hover{background:var(--su-red-bg);color:var(--su-red)}
 #sui2 .su-add-port{border:0;background:transparent;color:var(--su-blue);min-height:30px;padding:4px 9px;font-size:12.5px;font-weight:500}
-#sui2 .su-session-count{margin-left:auto;color:var(--su-faint);font-size:11.5px;font-variant-numeric:tabular-nums}
+#sui2 .su-session-count{margin-left:0;color:var(--su-faint);font-size:11.5px;font-variant-numeric:tabular-nums}
 
-/* ---------- 4. 连接栏 ---------- */
-#sui2 .su-connection{
-  flex:none;display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;
-  padding:10px 14px;background:var(--su-surface);border-bottom:1px solid var(--su-border);
-}
-#sui2 .su-field{display:flex;flex-direction:column;gap:4px;min-width:0}
-#sui2 .su-field>span{font-size:11.5px;color:var(--su-muted)}
-#sui2 .su-port{flex:0 1 260px}
+/* —— 连接控件条（并入会话行右侧） —— */
+#sui2 .su-conn-strip{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:auto;min-width:0}
+#sui2 .su-conn-strip .su-field{display:flex;min-width:0}
+#sui2 .su-conn-strip select{height:29px;font-size:12.5px}
+#sui2 .su-port{flex:0 1 230px}
 #sui2 .su-port select{width:100%}
-#sui2 .su-baud{width:132px}
-#sui2 .su-custom-baud{width:136px}
-#sui2 .su-params{width:150px}
-#sui2 .su-params button{width:100%;text-align:left;color:var(--su-muted)}
-#sui2 .su-connect{min-width:84px;margin-left:2px}
+#sui2 .su-baud{width:116px}
+#sui2 .su-custom-baud{width:118px}
+#sui2 .su-custom-baud input{height:29px;font-size:12.5px}
+#sui2 .su-icon-btn{
+  min-height:29px;width:29px;padding:0;display:inline-flex;align-items:center;justify-content:center;
+  color:var(--su-muted);border-radius:6px;flex:none;
+}
+#sui2 .su-icon-btn:hover:not(:disabled){color:var(--su-text)}
+#sui2 .su-params-btn{height:29px;font-size:12px;color:var(--su-muted);white-space:nowrap;flex:none}
+#sui2 .su-connect{min-width:76px}
+#sui2 .su-reconnect{min-width:auto}
 #sui2 .su-connection-state{
-  align-self:flex-end;display:flex;align-items:center;gap:7px;min-height:30px;margin-left:auto;
-  padding:0 10px;border-radius:20px;background:var(--su-bg);font-size:12px;color:var(--su-muted);
+  display:flex;align-items:center;gap:6px;min-height:29px;padding:0 10px;border-radius:20px;
+  background:var(--su-bg);font-size:12px;color:var(--su-muted);white-space:nowrap;
 }
 #sui2 .su-baud-error{flex:none;font-size:12px;color:var(--su-red);padding:6px 14px;background:var(--su-red-bg)}
 
@@ -178,40 +181,55 @@ body{margin:0;background:#eceef1}
 #sui2 .su-main-column{min-height:0;display:flex;flex-direction:column}
 #sui2 .su-log-panel{flex:1;min-height:0;display:flex;flex-direction:column}
 
-/* —— 日志工具栏（三层合并为统一工作台条） —— */
+/* —— 日志工具栏（单行：模式 / 操作 / 展开式搜索 / 显示选项弹层） —— */
 #sui2 .su-log-toolbar{
-  flex:none;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 10px;
-  padding:8px 12px 4px;
+  flex:none;position:relative;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;
+  padding:7px 12px;min-width:0;
 }
-#sui2 .su-title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#sui2 .su-log-toolbar>h2{flex:none}
+#sui2 .su-log-toolbar>.su-segment{flex:none}
+#sui2 .su-receive-encoding{flex:none}
 #sui2 .su-receive-encoding select{height:26px;font-size:12px;padding:2px 6px;color:var(--su-muted)}
-#sui2 .su-log-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#sui2 .su-log-actions{display:flex;align-items:center;gap:6px;flex:none}
 #sui2 .su-log-actions button{min-height:26px;font-size:12px;padding:2px 9px;color:var(--su-muted)}
 #sui2 .su-log-actions button:hover:not(:disabled){color:var(--su-text)}
+#sui2 .su-toolbar-right{display:flex;align-items:center;gap:6px;margin-left:auto;min-width:0}
 
-#sui2 .su-search-toolbar{
-  flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  padding:2px 12px 4px;
+/* 展开式搜索（聚焦时展开，Ctrl+F 直达） */
+#sui2 .su-search-box{
+  display:flex;align-items:center;gap:5px;min-width:0;padding:1px;
+  border:1px solid transparent;border-radius:16px;background:transparent;
+  transition:background var(--su-fast),border-color var(--su-fast);
 }
-#sui2 .su-search{flex:1;min-width:150px;max-width:360px;position:relative}
-#sui2 .su-search input{
-  width:100%;height:28px;font-size:12.5px;padding-left:26px;border-radius:14px;background:var(--su-surface);
+#sui2 .su-search-box:focus-within{background:var(--su-surface);border-color:var(--su-border)}
+#sui2 .su-search-box input{
+  width:0;min-width:0;opacity:0;padding:0;border:0;background:transparent;
+  height:26px;font-size:12.5px;transition:width 160ms ease,opacity 120ms ease;
 }
-#sui2 .su-search::before{
-  content:"";position:absolute;left:9px;top:50%;width:12px;height:12px;transform:translateY(-52%);
-  border:1.6px solid var(--su-faint);border-radius:50%;
-  box-shadow:5px 5px 0 -3.4px var(--su-faint);
+#sui2 .su-search-box:focus-within input{width:170px;opacity:1;padding:0 2px}
+#sui2 .su-search-box .su-search-count,
+#sui2 .su-search-box .su-small,
+#sui2 .su-search-box .su-check{display:none}
+#sui2 .su-search-box:focus-within .su-search-count{
+  display:inline;font-size:11.5px;color:var(--su-faint);white-space:nowrap;font-variant-numeric:tabular-nums;
 }
-#sui2 .su-search-count{font-size:11.5px;color:var(--su-faint);white-space:nowrap;font-variant-numeric:tabular-nums}
-#sui2 .su-search-toolbar .su-small{background:var(--su-surface)}
+#sui2 .su-search-box:focus-within .su-small{display:inline-flex;min-height:24px;padding:2px 8px;font-size:12px;background:var(--su-surface)}
+#sui2 .su-search-box:focus-within .su-check{display:inline-flex}
+#sui2 .su-search-toggle{color:var(--su-muted)}
 
-#sui2 .su-display-toolbar{
-  flex:none;display:flex;gap:14px;align-items:center;flex-wrap:wrap;
-  padding:2px 12px 8px;font-size:12px;color:var(--su-muted);
+/* 显示选项弹层 */
+#sui2 .su-display-box{position:relative;flex:none}
+#sui2 .su-display-pop{
+  position:absolute;top:calc(100% + 6px);right:0;z-index:25;width:248px;
+  background:var(--su-surface);border:1px solid var(--su-border);border-radius:10px;
+  box-shadow:var(--su-shadow-pop);padding:12px;display:flex;flex-direction:column;gap:10px;
+  font-size:12px;color:var(--su-muted);
 }
-#sui2 .su-display-toolbar label{display:flex;align-items:center;gap:5px}
-#sui2 .su-display-toolbar select{height:26px;font-size:12px;padding:2px 5px;color:var(--su-muted)}
-#sui2 .su-display-hint{margin-left:auto;font-size:11px;color:var(--su-faint)}
+#sui2 .su-display-pop label{display:flex;align-items:center;gap:6px}
+#sui2 .su-display-pop select{flex:1;min-width:0;height:28px;font-size:12px;color:var(--su-muted)}
+#sui2 .su-display-pop .su-display-hint{
+  margin:2px 0 0;font-size:11px;color:var(--su-faint);border-top:1px solid var(--su-border);padding-top:8px;
+}
 
 /* 暂停横幅 */
 #sui2 .su-pause-banner{
@@ -292,8 +310,8 @@ body{margin:0;background:#eceef1}
 #sui2 .su-log-screen::-webkit-scrollbar-track{background:transparent}
 
 /* ---------- 6. 发送面板 ---------- */
-#sui2 .su-send-panel{flex:none;padding:9px 14px 11px;background:var(--su-surface);border-top:1px solid var(--su-border)}
-#sui2 .su-send-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:7px}
+#sui2 .su-send-panel{flex:none;padding:8px 14px 10px;background:var(--su-surface);border-top:1px solid var(--su-border)}
+#sui2 .su-send-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
 #sui2 .su-send-target{
   font-size:11.5px;color:var(--su-blue);font-weight:600;background:var(--su-blue-bg);
   padding:1px 9px;border-radius:20px;
@@ -313,26 +331,27 @@ body{margin:0;background:#eceef1}
 }
 #sui2 .su-send-panel textarea:focus{outline:none;border-color:var(--su-blue);box-shadow:0 0 0 3px rgba(30,98,208,.14)}
 
-#sui2 .su-byte-preview{
-  display:flex;gap:9px;align-items:baseline;min-width:0;font-size:11px;color:var(--su-muted);
-  padding:5px 2px;font-variant-numeric:tabular-nums;
-}
-#sui2 .su-byte-preview code{
-  font:11px/1.5 "Cascadia Code",Consolas,monospace;color:var(--su-muted);flex:1;white-space:nowrap;overflow:hidden;
-  text-overflow:ellipsis;min-width:0;background:var(--su-bg);border:1px solid var(--su-border);
-  border-radius:5px;padding:2px 8px;
-}
-#sui2 .su-byte-preview>span{flex:none}
 #sui2 .su-inline-error{font-size:12px;color:var(--su-red);padding:3px 0}
 
-#sui2 .su-send-bottom{display:flex;justify-content:space-between;align-items:center;gap:9px;flex-wrap:wrap}
+/* 底行：历史 / 周期 / 最终字节预览 / 发送 合并为一行 */
+#sui2 .su-send-bottom{display:flex;justify-content:flex-start;align-items:center;gap:9px;flex-wrap:wrap;margin-top:6px}
 #sui2 .su-send-secondary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 #sui2 .su-history-label select{max-width:150px;width:120px;font-size:12px;color:var(--su-muted)}
 #sui2 .su-interval{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--su-muted)}
 #sui2 .su-interval input{width:72px;font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
 #sui2 .su-send-secondary [data-action="periodic"]{color:var(--su-muted)}
 #sui2 .su-periodic-note{font-size:11.5px;color:var(--su-amber);font-variant-numeric:tabular-nums}
-#sui2 .su-send-button{min-width:96px;min-height:34px;border-radius:8px;font-size:13px}
+#sui2 .su-byte-preview{
+  display:flex;gap:7px;align-items:baseline;min-width:0;flex:1;font-size:11px;color:var(--su-muted);
+  font-variant-numeric:tabular-nums;
+}
+#sui2 .su-byte-preview code{
+  font:11px/1.5 "Cascadia Code",Consolas,monospace;color:var(--su-muted);flex:1;min-width:60px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  background:var(--su-bg);border:1px solid var(--su-border);border-radius:5px;padding:2px 8px;
+}
+#sui2 .su-byte-preview>span{flex:none}
+#sui2 .su-send-button{min-width:96px;min-height:34px;border-radius:8px;font-size:13px;margin-left:auto}
 
 /* ---------- 7. 快捷指令侧栏 ---------- */
 #sui2 .su-commands{
@@ -421,12 +440,14 @@ body{margin:0;background:#eceef1}
 @media(min-width:1200px){
   #sui2 .su-workspace{grid-template-columns:minmax(0,1fr) 284px}
 }
+@media(max-width:1150px){
+  #sui2 .su-session-count{display:none}
+}
 @media(max-width:860px){
   #sui2 .su-workspace{grid-template-columns:minmax(0,1fr) 232px}
-  #sui2 .su-connection{gap:8px}
-  #sui2 .su-port{flex-basis:220px}
-  #sui2 .su-display-hint{display:none}
-  #sui2 .su-log-toolbar{align-items:flex-start}
+  #sui2 .su-conn-strip{gap:5px}
+  #sui2 .su-port{flex-basis:200px}
+  #sui2 .su-search-box:focus-within input{width:120px}
 }
 @media(max-width:640px){
   #sui2 .su-workspace{display:block;overflow:auto}
@@ -434,23 +455,22 @@ body{margin:0;background:#eceef1}
   #sui2 .su-header{padding:8px 12px;gap:6px}
   #sui2 .su-subtitle{display:none}
   #sui2 .su-header-actions{width:100%;justify-content:flex-end}
-  #sui2 .su-session-bar{padding:0 10px;gap:4px}
+  #sui2 .su-session-bar{padding:5px 10px;gap:4px}
   #sui2 .su-session-count{display:none}
-  #sui2 .su-connection{padding:10px 12px;gap:8px}
-  #sui2 .su-port{flex:1 1 200px}
-  #sui2 .su-baud{flex:1 1 92px}
-  #sui2 .su-params{flex:1 1 140px}
-  #sui2 .su-connection-state{margin-left:0}
-  #sui2 .su-log-toolbar,#sui2 .su-search-toolbar,#sui2 .su-display-toolbar{padding-left:10px;padding-right:10px}
+  #sui2 .su-conn-strip{margin-left:0;width:100%}
+  #sui2 .su-port{flex:1 1 170px}
+  #sui2 .su-baud{flex:1 1 90px}
+  #sui2 .su-custom-baud{flex:1 1 110px}
+  #sui2 .su-log-toolbar{padding-left:10px;padding-right:10px}
+  #sui2 .su-search-box:focus-within input{width:100px}
   #sui2 .su-log-screen{margin:0 10px}
   #sui2 .su-log-status{margin:8px 10px 10px}
   #sui2 .su-pause-banner{margin:0 10px 6px}
   #sui2 .su-log-row,#sui2 .su-show-meta .su-log-row{grid-template-columns:88px 40px minmax(0,1fr);gap:6px}
-  #sui2 .su-search{max-width:none}
-  #sui2 .su-send-panel{padding:9px 12px}
-  #sui2 .su-send-title{gap:7px}
+  #sui2 .su-send-panel{padding:8px 12px}
+  #sui2 .su-send-top{gap:7px}
   #sui2 .su-send-config{width:100%;justify-content:flex-end;margin-left:0}
-  #sui2 .su-send-button{flex:1}
+  #sui2 .su-send-button{flex:1;margin-left:0}
   #sui2 .su-overlay{padding:24px 8px}
   #sui2 .su-demo-footer{padding:4px 12px}
   #sui2 .su-keyboard-hint{display:none}
@@ -465,7 +485,7 @@ body{margin:0;background:#eceef1}
   #sui2 button,#sui2 input:not([type="checkbox"]),#sui2 select{min-height:44px}
   #sui2 .su-check{min-height:44px}
   #sui2 .su-segment button{min-height:40px}
-  #sui2 .su-log-actions button,#sui2 .su-search-toolbar .su-small,#sui2 .su-display-toolbar select{min-height:40px}
+  #sui2 .su-log-actions button,#sui2 .su-search-box .su-small,#sui2 .su-display-pop select{min-height:40px}
   #sui2 textarea,#sui2 input:not([type="checkbox"]),#sui2 select{font-size:16px}
   #sui2 .su-command-buttons button{min-height:44px;min-width:44px}
   #sui2 .su-tab-close{min-height:44px}

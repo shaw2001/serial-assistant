@@ -1,7 +1,7 @@
 {
   "name": "serial-assistant",
   "productName": "SerialAssistant",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "离线多串口调试助手，支持文本、HEX、快捷指令和无损日志",
   "author": "shaw2001",
   "license": "UNLICENSED",
