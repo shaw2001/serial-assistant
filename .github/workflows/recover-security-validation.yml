@@ -1,0 +1,24 @@
+name: Recover stalled security validation
+on:
+  push:
+    paths: [.github/workflows/recover-security-validation.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+jobs:
+  stop-obsolete-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Stop only the obsolete diagnostic run from this repair
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          test "$GH_REPO" = 'shaw2001/serial-assistant'
+          run_json=$(gh api "repos/$GH_REPO/actions/runs/37892265125")
+          test "$(echo "$run_json" | jq -r .head_sha)" = 'cf1f5bde6d1717407cfacb71ce9ac5002bfa3dde'
+          if test "$(echo "$run_json" | jq -r .status)" = 'in_progress'; then
+            gh api "repos/$GH_REPO/actions/runs/37892265125/force-cancel" --method POST
+          fi
