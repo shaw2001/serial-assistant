@@ -8,7 +8,7 @@ permissions:
   contents: read
 concurrency:
   group: release-v0.1.8
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   integration:
     runs-on: ubuntu-latest
@@ -64,19 +64,15 @@ jobs:
         working-directory: native
       - run: npm run build:native
       - name: Verify actual Windows startup and WebView security boundaries
+        timeout-minutes: 2
         shell: pwsh
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $exe = (Resolve-Path "release/SerialAssistant-$version-win-x64.exe").Path
           if ((Get-Item $exe).VersionInfo.ProductVersion -notlike "$version*") { throw 'Wrong version' }
           if ((Get-Item $exe).Length -gt 10MB) { throw 'EXE exceeds 10 MiB' }
-          $report = Join-Path $PWD 'release/desktop-validation.json'
-          $p = Start-Process $exe -ArgumentList @('--smoke-test', $report) -PassThru
-          if (!$p.WaitForExit(30000)) { $p.Kill(); throw 'Desktop startup timeout' }
-          if (Test-Path "$report.trace") { Get-Content "$report.trace" | Select-Object -Last 60 }
-          if ($p.ExitCode -ne 0 -or !(Test-Path $report)) { throw "Desktop security validation failed: exit=$($p.ExitCode)" }
-          $result = Get-Content $report -Raw | ConvertFrom-Json
-          if (!$result.fontReady -or !$result.layoutOK -or !$result.unauthorizedRejected -or $result.blockedNavigations -lt 1) { throw 'Security, font or layout check failed' }
+          node scripts/windows-security-smoke.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Windows security smoke failed' }
       - run: npm run checksums
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

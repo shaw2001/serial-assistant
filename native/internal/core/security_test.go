@@ -35,6 +35,14 @@ func TestSecurityConfigBoundary(t *testing.T) {
 	if ValidateConfig(b) == nil {
 		t.Fatal("extra commands accepted")
 	}
+	var missingHistory map[string]any
+	json.Unmarshal(good, &missingHistory)
+	delete(missingHistory["devices"].([]any)[0].(map[string]any), "history")
+	withoutHistory, _ := json.Marshal(missingHistory)
+	compatible, err := DecodeConfig(withoutHistory)
+	if err != nil || compatible.Devices[0].History == nil {
+		t.Fatal("missing optional history must normalize to an empty array")
+	}
 	normalized, e := DecodeConfig(good)
 	if e != nil {
 		t.Fatal(e)

@@ -100,6 +100,9 @@ func DecodeConfig(data []byte) (Config, error) {
 	ids := map[string]bool{}
 	for i := range c.Devices {
 		d := &c.Devices[i]
+		if d.History == nil {
+			d.History = []HistoryPayload{}
+		}
 		baud, e := strconv.Atoi(d.Baud)
 		if !idPattern.MatchString(d.ID) || ids[d.ID] || len(d.Path) > 256 || e != nil || baud < 1 || baud > 12000000 || !oneOf(d.ReceiveEncoding, "utf-8", "gbk", "ascii") {
 			return c, errors.New("设备配置无效。")
