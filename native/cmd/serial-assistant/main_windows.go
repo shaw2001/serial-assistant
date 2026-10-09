@@ -240,12 +240,7 @@ func main() {
 			if e != nil {
 				return nil, e
 			}
-			if e = core.ValidateConfig(data); e != nil {
-				return nil, e
-			}
-			var c any
-			e = json.Unmarshal(data, &c)
-			return c, e
+			return core.DecodeConfig(data)
 		case "exportConfig":
 			if len(r.Args) == 0 {
 				return nil, errors.New("缺少配置。")
