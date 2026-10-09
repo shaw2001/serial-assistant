@@ -4,6 +4,7 @@
 package edge
 
 import (
+	"encoding/base64"
 	"log"
 	"os"
 	"path/filepath"
@@ -15,11 +16,13 @@ import (
 )
 
 type Chromium struct {
-	blockedNavigations atomic.Uint64
-	navigationStarting *securityNavigationHandler
-	newWindowRequested *securityWindowHandler
-	allowDocument      bool
-	documentLoaded     bool
+	blockedNavigations      atomic.Uint64
+	navigationStarting      *securityNavigationHandler
+	frameNavigationStarting *securityNavigationHandler
+	initialDocumentURI      string
+	newWindowRequested      *securityWindowHandler
+	allowDocument           bool
+	documentLoaded          bool
 
 	hwnd                  uintptr
 	focusOnInit           bool
@@ -52,7 +55,8 @@ type Chromium struct {
 
 func NewChromium() *Chromium {
 	e := &Chromium{}
-	e.navigationStarting = newSecurityNavigationHandler(e)
+	e.navigationStarting = newSecurityNavigationHandler(e, true)
+	e.frameNavigationStarting = newSecurityNavigationHandler(e, false)
 	e.newWindowRequested = newSecurityWindowHandler()
 	/*
 	 All these handlers are passed to native code through syscalls with 'uintptr(unsafe.Pointer(handler))' and we know
@@ -133,6 +137,7 @@ func (e *Chromium) NavigateToString(htmlContent string) {
 	if e.documentLoaded {
 		return
 	}
+	e.initialDocumentURI = "data:text/html;charset=utf-8;base64," + base64.StdEncoding.EncodeToString([]byte(htmlContent))
 	e.allowDocument = true
 	_, _, _ = e.webview.vtbl.NavigateToString.Call(
 		uintptr(unsafe.Pointer(e.webview)),
@@ -240,7 +245,7 @@ func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller
 		handler uintptr
 	}{
 		{e.webview.vtbl.AddNavigationStarting, uintptr(unsafe.Pointer(e.navigationStarting))},
-		{e.webview.vtbl.AddFrameNavigationStarting, uintptr(unsafe.Pointer(e.navigationStarting))},
+		{e.webview.vtbl.AddFrameNavigationStarting, uintptr(unsafe.Pointer(e.frameNavigationStarting))},
 		{e.webview.vtbl.AddNewWindowRequested, uintptr(unsafe.Pointer(e.newWindowRequested))},
 	} {
 		hr, _, _ := registration.proc.Call(uintptr(unsafe.Pointer(e.webview)), registration.handler, uintptr(unsafe.Pointer(&token)))
@@ -267,9 +272,9 @@ func (e *Chromium) MessageReceived(sender *ICoreWebView2, args *iCoreWebView2Web
 	var source *uint16
 	hr, _, _ := args.vtbl.GetSource.Call(uintptr(unsafe.Pointer(args)), uintptr(unsafe.Pointer(&source)))
 	origin := w32.Utf16PtrToString(source)
-	securityTrace("message source=%q hr=%x", origin, hr)
+	securityTrace("message sourceLength=%d trusted=%t hr=%x", len(origin), e.isDocumentSource(origin), hr)
 	windows.CoTaskMemFree(unsafe.Pointer(source))
-	if int32(hr) < 0 || origin != "about:blank" {
+	if int32(hr) < 0 || !e.isDocumentSource(origin) {
 		return 0
 	}
 	var message *uint16

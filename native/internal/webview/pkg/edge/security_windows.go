@@ -28,11 +28,12 @@ type securityNavigationHandler struct {
 		_IUnknownVtbl
 		Invoke ComProc
 	}
-	browser *Chromium
+	browser  *Chromium
+	topLevel bool
 }
 
-func newSecurityNavigationHandler(e *Chromium) *securityNavigationHandler {
-	h := &securityNavigationHandler{browser: e}
+func newSecurityNavigationHandler(e *Chromium, topLevel bool) *securityNavigationHandler {
+	h := &securityNavigationHandler{browser: e, topLevel: topLevel}
 	h.vtbl = &struct {
 		_IUnknownVtbl
 		Invoke ComProc
@@ -47,9 +48,9 @@ func newSecurityNavigationHandler(e *Chromium) *securityNavigationHandler {
 		var uri *uint16
 		hr, _, _ := a.vtbl.GetURI.Call(uintptr(unsafe.Pointer(a)), uintptr(unsafe.Pointer(&uri)))
 		target := w32.Utf16PtrToString(uri)
-		securityTrace("navigation uri=%q hr=%x allow=%t loaded=%t", target, hr, h.browser.allowDocument, h.browser.documentLoaded)
+		securityTrace("navigation uriLength=%d expected=%t blank=%t hr=%x allow=%t loaded=%t top=%t", len(target), target == h.browser.initialDocumentURI, target == "about:blank", hr, h.browser.allowDocument, h.browser.documentLoaded, h.topLevel)
 		windows.CoTaskMemFree(unsafe.Pointer(uri))
-		if int32(hr) >= 0 && h.browser.allowDocument && !h.browser.documentLoaded && target == "about:blank" {
+		if int32(hr) >= 0 && h.topLevel && h.browser.allowDocument && !h.browser.documentLoaded && h.browser.isDocumentSource(target) {
 			h.browser.allowDocument = false
 			h.browser.documentLoaded = true
 			return 0
@@ -60,6 +61,12 @@ func newSecurityNavigationHandler(e *Chromium) *securityNavigationHandler {
 	})}
 	return h
 }
+
+// WebView2 may report the host-provided HTML as a data URI during navigation.
+// Trust only this exact per-launch document, never arbitrary data: pages.
+func (e *Chromium) isDocumentSource(source string) bool {
+	return source == "about:blank" || (e.initialDocumentURI != "" && source == e.initialDocumentURI)
+}
 func (e *Chromium) trustedDocument() bool {
 	if !e.documentLoaded || e.webview == nil {
 		return false
@@ -67,9 +74,9 @@ func (e *Chromium) trustedDocument() bool {
 	var uri *uint16
 	hr, _, _ := e.webview.vtbl.GetSource.Call(uintptr(unsafe.Pointer(e.webview)), uintptr(unsafe.Pointer(&uri)))
 	source := w32.Utf16PtrToString(uri)
-	securityTrace("source=%q hr=%x loaded=%t", source, hr, e.documentLoaded)
+	securityTrace("sourceLength=%d trusted=%t hr=%x loaded=%t", len(source), e.isDocumentSource(source), hr, e.documentLoaded)
 	windows.CoTaskMemFree(unsafe.Pointer(uri))
-	return int32(hr) >= 0 && source == "about:blank"
+	return int32(hr) >= 0 && e.isDocumentSource(source)
 }
 
 // ICoreWebView2NewWindowRequestedEventArgs starts with these methods.
