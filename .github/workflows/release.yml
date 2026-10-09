@@ -106,7 +106,13 @@ jobs:
           cd release
           sha256sum --check SHA256SUMS.txt
           cd ..
-          gh release create v0.1.8 release/SerialAssistant-0.1.8-win-x64.exe release/SHA256SUMS.txt --target "$RELEASE_COMMIT" --title 'v0.1.8 · 安全修复' --notes-file docs/releases/v0.1.8.md --draft
+          if gh release view v0.1.8 >/dev/null 2>&1; then
+            mkdir verified-release
+            gh release download v0.1.8 --pattern SerialAssistant-0.1.8-win-x64.exe --dir verified-release
+            cmp release/SerialAssistant-0.1.8-win-x64.exe verified-release/SerialAssistant-0.1.8-win-x64.exe
+          else
+            gh release create v0.1.8 release/SerialAssistant-0.1.8-win-x64.exe release/SHA256SUMS.txt --target "$RELEASE_COMMIT" --title 'v0.1.8 · 安全修复' --notes-file docs/releases/v0.1.8.md --draft
+          fi
           gh release edit v0.1.8 --draft=false --latest
   retire-vulnerable-downloads:
     needs: publish

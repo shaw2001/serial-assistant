@@ -12,7 +12,7 @@ async function main(){
  if(process.env.GH_REPO!==repository||!process.env.GH_TOKEN)throw new Error('Expected repository and authenticated GitHub Actions context required');
  const fixed=await api('releases/tags/v0.1.8');
  if(fixed.draft||fixed.prerelease||!fixed.assets.some(a=>a.name==='SerialAssistant-0.1.8-win-x64.exe'&&a.state==='uploaded')||!fixed.assets.some(a=>a.name==='SHA256SUMS.txt'&&a.state==='uploaded'))throw new Error('Verified replacement release is not available');
- for(const tag of retired){const release=await api(`releases/tags/${tag}`,'GET',true);if(release){await api(`releases/${release.id}`,'DELETE');console.log('Removed release and assets:',tag)}await api(`git/refs/tags/${tag}`,'DELETE',true)}
+ for(const tag of retired){const release=await api(`releases/tags/${tag}`,'GET',true);if(release){await api(`releases/${release.id}`,'DELETE');console.log('Removed release and assets:',tag)}const ref=await api(`git/ref/tags/${tag}`,'GET',true);if(ref)await api(`git/refs/tags/${tag}`,'DELETE',true)}
  const artifacts=[];
  for(let page=1;;page++){const data=await api(`actions/artifacts?per_page=100&page=${page}`);artifacts.push(...data.artifacts);if(data.artifacts.length<100)break}
  for(const artifact of artifacts){if(/^SerialAssistant-v?0\.1\.[0-7](?:-|$)/.test(artifact.name)){await api(`actions/artifacts/${artifact.id}`,'DELETE',true);console.log('Removed retired build artifact:',artifact.name)}}
