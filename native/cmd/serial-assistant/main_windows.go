@@ -36,9 +36,88 @@ var user32 = windows.NewLazySystemDLL("user32.dll")
 var messageBox = user32.NewProc("MessageBoxW")
 var setWindowPos = user32.NewProc("SetWindowPos")
 var setWindowLong = user32.NewProc("SetWindowLongPtrW")
+var getWindowLong = user32.NewProc("GetWindowLongPtrW")
 var callWindowProc = user32.NewProc("CallWindowProcW")
 var postMessage = user32.NewProc("PostMessageW")
+var showWindow = user32.NewProc("ShowWindow")
+var isZoomed = user32.NewProc("IsZoomed")
+var getSystemMetrics = user32.NewProc("GetSystemMetrics")
+var getWindowRect = user32.NewProc("GetWindowRect")
 var shellExecute = windows.NewLazySystemDLL("shell32.dll").NewProc("ShellExecuteW")
+var dwmapi = windows.NewLazySystemDLL("dwmapi.dll")
+var dwmSetWindowAttribute = dwmapi.NewProc("DwmSetWindowAttribute")
+var dwmExtendFrameIntoClientArea = dwmapi.NewProc("DwmExtendFrameIntoClientArea")
+
+// DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWA_SYSTEMBACKDROP_TYPE.
+const (
+	dwmwaUseImmersiveDarkMode   = 20
+	dwmwaWindowCornerPreference = 33
+	dwmwaSystemBackdropType     = 38
+	dwmBackdropMica             = 2 // DWMSBT_MAINWINDOW
+	dwmBackdropAcrylic          = 3 // DWMSBT_TRANSIENTWINDOW
+	dwmCornerRound              = 2 // DWMWCP_ROUND
+	wsExNoRedirectionBitmap     = 0x00200000
+	gwlExStyle                  = ^uintptr(19) // -20
+)
+
+var glassOn atomic.Bool
+
+type dwmMargins struct{ Left, Right, Top, Bottom int32 }
+
+func hrFailed(hr uintptr) bool { return int32(hr) < 0 }
+
+func setDwmAttribute(hwnd uintptr, attr uint32, value int32) uintptr {
+	hr, _, _ := dwmSetWindowAttribute.Call(hwnd, uintptr(attr), uintptr(unsafe.Pointer(&value)), unsafe.Sizeof(value))
+	return hr
+}
+
+// applyGlass makes the window a borderless Win11 Acrylic/Mica surface.
+// It returns false on Windows 10 or when the backdrop attribute is rejected;
+// the page then paints an opaque background and keeps the same chrome.
+func applyGlass(hwnd uintptr) bool {
+	build := windows.RtlGetVersion()
+	_ = setDwmAttribute(hwnd, dwmwaWindowCornerPreference, dwmCornerRound)
+	_ = setDwmAttribute(hwnd, dwmwaUseImmersiveDarkMode, 1)
+	if build == nil || !glassBackdropSupported(build.BuildNumber) {
+		return false
+	}
+	if hrFailed(setDwmAttribute(hwnd, dwmwaSystemBackdropType, dwmBackdropAcrylic)) &&
+		hrFailed(setDwmAttribute(hwnd, dwmwaSystemBackdropType, dwmBackdropMica)) {
+		return false
+	}
+	margins := dwmMargins{-1, -1, -1, -1}
+	hr, _, _ := dwmExtendFrameIntoClientArea.Call(hwnd, uintptr(unsafe.Pointer(&margins)))
+	if hrFailed(hr) {
+		return false
+	}
+	ex, _, _ := getWindowLong.Call(hwnd, gwlExStyle)
+	_, _, _ = setWindowLong.Call(hwnd, gwlExStyle, ex|wsExNoRedirectionBitmap)
+	_, _, _ = setWindowPos.Call(hwnd, 0, 0, 0, 0, 0, 0x0027) // SWP_NOSIZE|SWP_NOMOVE|SWP_NOZORDER|SWP_FRAMECHANGED
+	return true
+}
+
+func setImmersiveDark(hwnd uintptr, dark bool) {
+	value := int32(0)
+	if dark {
+		value = 1
+	}
+	_ = setDwmAttribute(hwnd, dwmwaUseImmersiveDarkMode, value)
+}
+
+func windowCommand(hwnd uintptr, cmd string) {
+	switch cmd {
+	case "minimize":
+		showWindow.Call(hwnd, 6)
+	case "maximize":
+		if zoomed, _, _ := isZoomed.Call(hwnd); zoomed != 0 {
+			showWindow.Call(hwnd, 9)
+		} else {
+			showWindow.Call(hwnd, 3)
+		}
+	case "close":
+		postMessage.Call(hwnd, 0x10, 0, 0)
+	}
+}
 
 func wide(s string) *uint16 { p, _ := windows.UTF16PtrFromString(s); return p }
 func alert(s string) {
@@ -111,7 +190,9 @@ func main() {
 		return
 	}
 	bridgeToken := hex.EncodeToString(key)
-	w := webview.NewWithOptions(webview.WebViewOptions{DataPath: filepath.Join(dir, "WebView2"), AutoFocus: true, WindowOptions: webview.WindowOptions{Title: "串口助手 · v" + version, Width: 1220, Height: 860}})
+	// 0 is the documented transparent default; the controller also sets alpha 0.
+	_ = os.Setenv("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "0")
+	w := webview.NewWithOptions(webview.WebViewOptions{DataPath: filepath.Join(dir, "WebView2"), AutoFocus: true, WindowOptions: webview.WindowOptions{Title: "串口助手 · v" + version, Width: 1440, Height: 900}})
 	if w == nil {
 		alert("窗口初始化失败。")
 		if smoke {
@@ -120,13 +201,61 @@ func main() {
 		return
 	}
 	defer w.Destroy()
-	w.SetSize(760, 620, webview.HintMin)
+	w.SetSize(1024, 640, webview.HintMin)
 	service := core.NewService(filepath.Join(dir, "logs"), core.OpenSerial)
 	defer service.Shutdown()
 	var quitting, closing atomic.Bool
 	var smokeDone atomic.Bool
 	var original uintptr
 	callback := windows.NewCallback(func(hwnd, msg, wp, lp uintptr) uintptr {
+		if msg == 0x0083 && wp != 0 { // WM_NCCALCSIZE: client area fills the borderless window
+			if zoomed, _, _ := isZoomed.Call(hwnd); zoomed != 0 {
+				frameX, _, _ := getSystemMetrics.Call(32)
+				padX, _, _ := getSystemMetrics.Call(92)
+				frameY, _, _ := getSystemMetrics.Call(33)
+				padY, _, _ := getSystemMetrics.Call(93)
+				r := (*struct{ Left, Top, Right, Bottom int32 })(unsafe.Pointer(lp))
+				r.Left += int32(frameX + padX)
+				r.Top += int32(frameY + padY)
+				r.Right -= int32(frameX + padX)
+				r.Bottom -= int32(frameY + padY)
+			}
+			return 0
+		}
+		if msg == 0x0084 { // WM_NCHITTEST: keep the borderless window resizable
+			if zoomed, _, _ := isZoomed.Call(hwnd); zoomed == 0 {
+				var rect struct{ Left, Top, Right, Bottom int32 }
+				getWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rect)))
+				x := int32(int16(lp & 0xffff))
+				y := int32(int16((lp >> 16) & 0xffff))
+				const border int32 = 6
+				onLeft := x < rect.Left+border
+				onRight := x >= rect.Right-border
+				onTop := y < rect.Top+border
+				onBottom := y >= rect.Bottom-border
+				switch {
+				case onTop && onLeft:
+					return 13 // HTTOPLEFT
+				case onTop && onRight:
+					return 14 // HTTOPRIGHT
+				case onBottom && onLeft:
+					return 16 // HTBOTTOMLEFT
+				case onBottom && onRight:
+					return 17 // HTBOTTOMRIGHT
+				case onLeft:
+					return 10 // HTLEFT
+				case onRight:
+					return 11 // HTRIGHT
+				case onTop:
+					return 12 // HTTOP
+				case onBottom:
+					return 15 // HTBOTTOM
+				}
+			}
+		}
+		if msg == 0x0014 { // WM_ERASEBKGND: the page or the DWM backdrop paints this
+			return 1
+		}
 		if msg == 0x10 && !quitting.Load() {
 			if closing.CompareAndSwap(false, true) {
 				w.Eval("window.__nativeClosing && window.__nativeClosing()")
@@ -144,6 +273,7 @@ func main() {
 		return result
 	})
 	original, _, _ = setWindowLong.Call(uintptr(w.Window()), ^uintptr(3), callback)
+	glassOn.Store(applyGlass(uintptr(w.Window())))
 	invoke := func(r request) (any, error) {
 		id, _ := arg[string](r, 0)
 		switch r.Method {
@@ -152,7 +282,7 @@ func main() {
 			return string(bytes), e
 		case "initialize":
 			config, warning := core.LoadConfig(filepath.Join(dir, "config.json"))
-			return map[string]any{"config": config, "warning": warning, "version": version, "platform": "win32", "logsDirectory": filepath.Join(dir, "logs")}, nil
+			return map[string]any{"config": config, "warning": warning, "version": version, "platform": "win32", "glass": glassOn.Load(), "logsDirectory": filepath.Join(dir, "logs")}, nil
 		case "listPorts":
 			ports, e := enumerator.GetDetailedPortsList()
 			if e != nil {
@@ -321,6 +451,30 @@ func main() {
 			if result <= 32 {
 				return nil, errors.New("无法打开浏览器。")
 			}
+			return nil, nil
+		case "setTheme":
+			dark, e := arg[bool](r, 0)
+			if e != nil {
+				return nil, e
+			}
+			done := make(chan struct{})
+			w.Dispatch(func() {
+				setImmersiveDark(uintptr(w.Window()), dark)
+				close(done)
+			})
+			<-done
+			return nil, nil
+		case "windowCommand":
+			cmd, e := arg[string](r, 0)
+			if e != nil {
+				return nil, e
+			}
+			done := make(chan struct{})
+			w.Dispatch(func() {
+				windowCommand(uintptr(w.Window()), cmd)
+				close(done)
+			})
+			<-done
 			return nil, nil
 		case "setAlwaysOnTop":
 			on, e := arg[bool](r, 0)

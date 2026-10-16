@@ -210,6 +210,11 @@ func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller
 	}
 	_, _, _ = controller.vtbl.AddRef.Call(uintptr(unsafe.Pointer(controller)))
 	e.controller = controller
+	// Alpha 0 lets the page background show the DWM backdrop. Windows 10
+	// pages paint an opaque fallback themselves.
+	if ctrl2 := controller.GetICoreWebView2Controller2(); ctrl2 != nil {
+		_ = ctrl2.PutDefaultBackgroundColor(COREWEBVIEW2_COLOR{})
+	}
 
 	var token _EventRegistrationToken
 	_, _, _ = controller.vtbl.GetCoreWebView2.Call(
