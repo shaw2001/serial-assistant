@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -43,6 +44,10 @@ var showWindow = user32.NewProc("ShowWindow")
 var isZoomed = user32.NewProc("IsZoomed")
 var getSystemMetrics = user32.NewProc("GetSystemMetrics")
 var getWindowRect = user32.NewProc("GetWindowRect")
+var releaseCapture = user32.NewProc("ReleaseCapture")
+var sendMessageW = user32.NewProc("SendMessageW")
+var getWindow = user32.NewProc("GetWindow")
+var defWindowProc = user32.NewProc("DefWindowProcW")
 var shellExecute = windows.NewLazySystemDLL("shell32.dll").NewProc("ShellExecuteW")
 var dwmapi = windows.NewLazySystemDLL("dwmapi.dll")
 var dwmSetWindowAttribute = dwmapi.NewProc("DwmSetWindowAttribute")
@@ -52,13 +57,25 @@ var dwmExtendFrameIntoClientArea = dwmapi.NewProc("DwmExtendFrameIntoClientArea"
 const (
 	dwmwaUseImmersiveDarkMode   = 20
 	dwmwaWindowCornerPreference = 33
+	dwmwaBorderColor            = 34
+	dwmwaCaptionColor           = 35
 	dwmwaSystemBackdropType     = 38
-	dwmBackdropMica             = 2 // DWMSBT_MAINWINDOW
-	dwmBackdropAcrylic          = 3 // DWMSBT_TRANSIENTWINDOW
-	dwmCornerRound              = 2 // DWMWCP_ROUND
+	dwmBackdropMica             = 2         // DWMSBT_MAINWINDOW
+	dwmBackdropAcrylic          = 3         // DWMSBT_TRANSIENTWINDOW
+	dwmCornerRound              = 2         // DWMWCP_ROUND
+	dwmColorNone                = int32(-2) // DWMWA_COLOR_NONE
 	wsExNoRedirectionBitmap     = 0x00200000
 	gwlExStyle                  = ^uintptr(19) // -20
+	gwlWndProc                  = ^uintptr(3)  // GWLP_WNDPROC
+	wmNcHitTest                 = 0x0084
+	wmParentNotify              = 0x0210
+	wmNcLButtonDown             = 0x00A1
+	htTransparent               = ^uintptr(0) // HTTRANSPARENT
 )
+
+var hostWindow uintptr
+var childProc uintptr
+var childProcs sync.Map
 
 var glassOn atomic.Bool
 
@@ -72,28 +89,139 @@ func setDwmAttribute(hwnd uintptr, attr uint32, value int32) uintptr {
 }
 
 // applyGlass makes the window a borderless Win11 Acrylic/Mica surface.
+// WebView2 must keep its redirection surface: WS_EX_NOREDIRECTIONBITMAP hides
+// the DWM backdrop behind an opaque client, which is why the glass looked solid.
 // It returns false on Windows 10 or when the backdrop attribute is rejected;
-// the page then paints an opaque background and keeps the same chrome.
+// the page then paints the bundled wallpaper and keeps the same chrome.
 func applyGlass(hwnd uintptr) bool {
 	build := windows.RtlGetVersion()
 	_ = setDwmAttribute(hwnd, dwmwaWindowCornerPreference, dwmCornerRound)
 	_ = setDwmAttribute(hwnd, dwmwaUseImmersiveDarkMode, 1)
-	if build == nil || !glassBackdropSupported(build.BuildNumber) {
+	// Drop the caption/border fill so rounded corners stay transparent.
+	_ = setDwmAttribute(hwnd, dwmwaBorderColor, dwmColorNone)
+	_ = setDwmAttribute(hwnd, dwmwaCaptionColor, dwmColorNone)
+	margins := dwmMargins{-1, -1, -1, -1}
+	extend, _, _ := dwmExtendFrameIntoClientArea.Call(hwnd, uintptr(unsafe.Pointer(&margins)))
+	ex, _, _ := getWindowLong.Call(hwnd, gwlExStyle)
+	if ex&wsExNoRedirectionBitmap != 0 {
+		_, _, _ = setWindowLong.Call(hwnd, gwlExStyle, ex&^wsExNoRedirectionBitmap)
+	}
+	_, _, _ = setWindowPos.Call(hwnd, 0, 0, 0, 0, 0, 0x0027) // SWP_NOSIZE|SWP_NOMOVE|SWP_NOZORDER|SWP_FRAMECHANGED
+	if build == nil || !glassBackdropSupported(build.BuildNumber) || hrFailed(extend) {
 		return false
 	}
 	if hrFailed(setDwmAttribute(hwnd, dwmwaSystemBackdropType, dwmBackdropAcrylic)) &&
 		hrFailed(setDwmAttribute(hwnd, dwmwaSystemBackdropType, dwmBackdropMica)) {
 		return false
 	}
-	margins := dwmMargins{-1, -1, -1, -1}
-	hr, _, _ := dwmExtendFrameIntoClientArea.Call(hwnd, uintptr(unsafe.Pointer(&margins)))
-	if hrFailed(hr) {
+	return true
+}
+
+func borderZone(lp uintptr) bool {
+	if hostWindow == 0 {
 		return false
 	}
-	ex, _, _ := getWindowLong.Call(hwnd, gwlExStyle)
-	_, _, _ = setWindowLong.Call(hwnd, gwlExStyle, ex|wsExNoRedirectionBitmap)
-	_, _, _ = setWindowPos.Call(hwnd, 0, 0, 0, 0, 0, 0x0027) // SWP_NOSIZE|SWP_NOMOVE|SWP_NOZORDER|SWP_FRAMECHANGED
-	return true
+	if zoomed, _, _ := isZoomed.Call(hostWindow); zoomed != 0 {
+		return false
+	}
+	var rect struct{ Left, Top, Right, Bottom int32 }
+	getWindowRect.Call(hostWindow, uintptr(unsafe.Pointer(&rect)))
+	x := int32(int16(lp & 0xffff))
+	y := int32(int16((lp >> 16) & 0xffff))
+	const border int32 = 8
+	return x < rect.Left+border || x >= rect.Right-border || y < rect.Top+border || y >= rect.Bottom-border
+}
+
+func subclassChild(hwnd uintptr) {
+	if hwnd == 0 || hwnd == hostWindow || childProc == 0 {
+		return
+	}
+	if _, ok := childProcs.Load(hwnd); ok {
+		return
+	}
+	prev, _, _ := setWindowLong.Call(hwnd, gwlWndProc, childProc)
+	if prev == 0 || prev == childProc {
+		return
+	}
+	childProcs.Store(hwnd, prev)
+}
+
+func subclassTree(root uintptr) {
+	var walk func(uintptr, int)
+	walk = func(hwnd uintptr, depth int) {
+		if hwnd == 0 || depth > 8 {
+			return
+		}
+		child, _, _ := getWindow.Call(hwnd, 5) // GW_CHILD
+		for i := 0; child != 0 && i < 32; i++ {
+			subclassChild(child)
+			walk(child, depth+1)
+			next, _, _ := getWindow.Call(child, 2) // GW_HWNDNEXT
+			if next == 0 || next == child || next == hwnd {
+				break
+			}
+			child = next
+		}
+	}
+	walk(root, 0)
+}
+
+func installChildHooks(hwnd uintptr) {
+	hostWindow = hwnd
+	if childProc == 0 {
+		childProc = windows.NewCallback(func(hwnd, msg, wp, lp uintptr) uintptr {
+			if msg == wmNcHitTest && borderZone(lp) {
+				return htTransparent
+			}
+			if orig, ok := childProcs.Load(hwnd); ok {
+				r, _, _ := callWindowProc.Call(orig.(uintptr), hwnd, msg, wp, lp)
+				return r
+			}
+			r, _, _ := defWindowProc.Call(hwnd, msg, wp, lp)
+			return r
+		})
+	}
+	subclassTree(hwnd)
+}
+
+func chromeHit(cmd string) uintptr {
+	switch cmd {
+	case "drag":
+		return 2 // HTCAPTION
+	case "resize-left":
+		return 10
+	case "resize-right":
+		return 11
+	case "resize-top":
+		return 12
+	case "resize-topleft":
+		return 13
+	case "resize-topright":
+		return 14
+	case "resize-bottom":
+		return 15
+	case "resize-bottomleft":
+		return 16
+	case "resize-bottomright":
+		return 17
+	default:
+		return 0
+	}
+}
+
+// beginChromeMove starts the system move/resize loop while the mouse button is
+// still down. It must run on the UI thread inside the web message callback.
+func beginChromeMove(hwnd, hit uintptr) {
+	if hwnd == 0 || hit == 0 {
+		return
+	}
+	if hit != 2 {
+		if zoomed, _, _ := isZoomed.Call(hwnd); zoomed != 0 {
+			return
+		}
+	}
+	releaseCapture.Call()
+	sendMessageW.Call(hwnd, wmNcLButtonDown, hit, 0)
 }
 
 func setImmersiveDark(hwnd uintptr, dark bool) {
@@ -190,8 +318,9 @@ func main() {
 		return
 	}
 	bridgeToken := hex.EncodeToString(key)
-	// 0 is the documented transparent default; the controller also sets alpha 0.
-	_ = os.Setenv("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "0")
+	// 0x00000000 is the documented transparent WebView2 background (AARRGGBB).
+	// A bare "0" is ignored by some runtimes and leaves an opaque black client.
+	_ = os.Setenv("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "0x00000000")
 	w := webview.NewWithOptions(webview.WebViewOptions{DataPath: filepath.Join(dir, "WebView2"), AutoFocus: true, WindowOptions: webview.WindowOptions{Title: "串口助手 · v" + version, Width: 1440, Height: 900}})
 	if w == nil {
 		alert("窗口初始化失败。")
@@ -222,13 +351,16 @@ func main() {
 			}
 			return 0
 		}
-		if msg == 0x0084 { // WM_NCHITTEST: keep the borderless window resizable
+		if msg == wmParentNotify && uint16(wp) == 1 { // child created; WebView2 adds HWNDs late
+			subclassTree(hwnd)
+		}
+		if msg == wmNcHitTest { // WM_NCHITTEST: keep the borderless window resizable
 			if zoomed, _, _ := isZoomed.Call(hwnd); zoomed == 0 {
 				var rect struct{ Left, Top, Right, Bottom int32 }
 				getWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rect)))
 				x := int32(int16(lp & 0xffff))
 				y := int32(int16((lp >> 16) & 0xffff))
-				const border int32 = 6
+				const border int32 = 8
 				onLeft := x < rect.Left+border
 				onRight := x >= rect.Right-border
 				onTop := y < rect.Top+border
@@ -272,8 +404,9 @@ func main() {
 		result, _, _ := callWindowProc.Call(original, hwnd, msg, wp, lp)
 		return result
 	})
-	original, _, _ = setWindowLong.Call(uintptr(w.Window()), ^uintptr(3), callback)
+	original, _, _ = setWindowLong.Call(uintptr(w.Window()), gwlWndProc, callback)
 	glassOn.Store(applyGlass(uintptr(w.Window())))
+	installChildHooks(uintptr(w.Window()))
 	invoke := func(r request) (any, error) {
 		id, _ := arg[string](r, 0)
 		switch r.Method {
@@ -543,6 +676,20 @@ func main() {
 		if r.Token != bridgeToken {
 			return errors.New("页面调用未授权。")
 		}
+		// Drag and resize must enter the modal loop before this callback returns,
+		// while the mouse button that started the gesture is still down.
+		if r.Method == "windowCommand" && len(r.Args) > 0 && len(r.Args) <= 4 && r.ID >= 1 {
+			var cmd string
+			if json.Unmarshal(r.Args[0], &cmd) == nil {
+				if hit := chromeHit(cmd); hit != 0 {
+					beginChromeMove(uintptr(w.Window()), hit)
+					w.Dispatch(func() {
+						w.Eval(fmt.Sprintf("window.__nativeResolve(%d,%s)", r.ID, `{"ok":true,"value":null}`))
+					})
+					return nil
+				}
+			}
+		}
 		select {
 		case requests <- struct{}{}:
 		default:
@@ -584,13 +731,21 @@ func main() {
 	end := strings.Index(html[start:], ">") + start
 	policy := `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-` + nonce + `'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">`
 	html = html[:start] + policy + html[end+1:]
-	cssText := strings.ReplaceAll(string(css), "OPPOSans-Regular.woff2", "data:font/woff2;base64,"+base64.StdEncoding.EncodeToString(font))
+	cssText := string(css)
+	if wall, err := web.Assets.ReadFile("wallpaper.jpg"); err == nil && len(wall) > 0 {
+		cssText = strings.ReplaceAll(cssText, "wallpaper.jpg", "data:image/jpeg;base64,"+base64.StdEncoding.EncodeToString(wall))
+	}
+	cssText = strings.ReplaceAll(cssText, "OPPOSans-Regular.woff2", "data:font/woff2;base64,"+base64.StdEncoding.EncodeToString(font))
 	html = strings.Replace(html, `<link rel="stylesheet" href="app.css">`, "<style>"+cssText+"</style>", 1)
 	html = strings.Replace(html, `<script src="app.js"></script>`, `<script nonce="`+nonce+`">`+strings.Replace(string(bridge), "__BRIDGE_TOKEN__", bridgeToken, 1)+"\n"+strings.ReplaceAll(string(js), "</script", "<\\/script")+`</script>`, 1)
 	if smoke {
 		log.Print("setting HTML")
 	}
 	w.SetHtml(html)
+	// The controller exists only after the environment callback. Apply the
+	// backdrop again so Acrylic/Mica is not lost behind the first navigation.
+	glassOn.Store(applyGlass(uintptr(w.Window())))
+	subclassTree(uintptr(w.Window()))
 	if smoke {
 		go func() {
 			time.Sleep(25 * time.Second)

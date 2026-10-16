@@ -4,7 +4,7 @@ import "testing"
 
 func TestGlassBackdropSupported(t *testing.T) {
 	if glassBackdropSupported(19045) {
-		t.Fatal("Windows 10 should use the opaque fallback")
+		t.Fatal("Windows 10 should use the wallpaper fallback")
 	}
 	if glassBackdropSupported(22000) != true {
 		t.Fatal("Windows 11 should attempt the DWM backdrop")

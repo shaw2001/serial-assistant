@@ -16,7 +16,7 @@ async function main(){
   await fs.writeFile(font,data);await fs.mkdir(path.join(root,'dist'),{recursive:true});
   for(const file of await fs.readdir(path.join(root,'src/main')))if(file.endsWith('.cjs'))new vm.Script(await fs.readFile(path.join(root,'src/main',file),'utf8'),{filename:file});
   await build({entryPoints:[path.join(root,'src/renderer/app.mjs')],outfile:path.join(root,'dist/app.js'),bundle:true,platform:'browser',target:'chrome130',minify:true,legalComments:'none'});
-  await Promise.all(['index.html','app.css'].map(file=>fs.copyFile(path.join(root,'src/renderer',file),path.join(root,'dist',file))));
+  await Promise.all(['index.html','app.css','wallpaper.jpg'].map(file=>fs.copyFile(path.join(root,'src/renderer',file),path.join(root,'dist',file))));
   await fs.copyFile(font,path.join(root,'dist/OPPOSans-Regular.woff2'));
   console.log('Built v'+require('../package.json').version+'; original OPPO Sans verified; all runtime assets are local.');
 }
