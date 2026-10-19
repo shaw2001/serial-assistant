@@ -64,6 +64,9 @@ type WindowOptions struct {
 	Height uint
 	IconId uint
 	Center bool
+	// Hidden creates the window without showing it; the caller shows it once
+	// the page has painted (avoids a blank white window at startup).
+	Hidden bool
 }
 
 type WebViewOptions struct {
@@ -73,6 +76,10 @@ type WebViewOptions struct {
 	// DataPath specifies the datapath for the WebView2 runtime to use for the
 	// browser instance.
 	DataPath string
+
+	// BrowserExecutableFolder, when set, points at a WebView2 Fixed Version
+	// runtime (the folder holding msedgewebview2.exe). Empty uses Evergreen.
+	BrowserExecutableFolder string
 
 	// AutoFocus will try to keep the WebView2 widget focused when the window
 	// is focused.
@@ -102,6 +109,7 @@ func NewWithOptions(options WebViewOptions) WebView {
 	chromium := edge.NewChromium()
 	chromium.MessageCallback = w.msgcb
 	chromium.DataPath = options.DataPath
+	chromium.BrowserExecutableFolder = options.BrowserExecutableFolder
 	chromium.SetGlobalPermission(edge.CoreWebView2PermissionStateDeny)
 
 	w.browser = chromium
@@ -333,9 +341,11 @@ func (w *webview) CreateWithOptions(opts WindowOptions) bool {
 	)
 	setWindowContext(w.hwnd, w)
 
-	_, _, _ = w32.User32ShowWindow.Call(w.hwnd, w32.SWShow)
-	_, _, _ = w32.User32UpdateWindow.Call(w.hwnd)
-	_, _, _ = w32.User32SetFocus.Call(w.hwnd)
+	if !opts.Hidden {
+		_, _, _ = w32.User32ShowWindow.Call(w.hwnd, w32.SWShow)
+		_, _, _ = w32.User32UpdateWindow.Call(w.hwnd)
+		_, _, _ = w32.User32SetFocus.Call(w.hwnd)
+	}
 
 	if !w.browser.Embed(w.hwnd) {
 		return false
@@ -391,7 +401,11 @@ func (w *webview) Navigate(url string) {
 }
 
 func (w *webview) SetHtml(html string) {
-	w.browser.NavigateToString(html)
+	_ = w.SetHtmlChecked(html)
+}
+
+func (w *webview) SetHtmlChecked(html string) error {
+	return w.browser.(*edge.Chromium).NavigateToStringChecked(html)
 }
 
 func (w *webview) SetTitle(title string) {
@@ -479,6 +493,29 @@ func (w *webview) Bind(name string, f interface{}) error {
 	})()`)
 
 	return nil
+}
+
+func (w *webview) RefreshHost(visible bool) (left, top, right, bottom int32) {
+	r := w.browser.(*edge.Chromium).RefreshHost(visible)
+	return r.Left, r.Top, r.Right, r.Bottom
+}
+
+// ResizeHost puts the WebView2 bounds to the host's current client rectangle.
+func (w *webview) ResizeHost() {
+	w.browser.Resize()
+}
+
+// NotifyHostMoved forwards NotifyParentWindowPositionChanged to WebView2.
+func (w *webview) NotifyHostMoved() {
+	w.browser.(*edge.Chromium).NotifyMoved()
+}
+
+func (w *webview) SetHostVisible(visible bool) {
+	w.browser.(*edge.Chromium).SetHostVisible(visible)
+}
+
+func (w *webview) BackgroundState() (uint32, uint32) {
+	return w.browser.(*edge.Chromium).BackgroundState()
 }
 
 func (w *webview) BlockedNavigations() uint64 { return w.browser.(*edge.Chromium).BlockedNavigations() }

@@ -125,7 +125,7 @@ func TestIndependentPortsReopenAndCapture(t *testing.T) {
 		t.Fatal("cross port send")
 	}
 	file := filepath.Join(t.TempDir(), "all.jsonl")
-	if e := s.Export(file, ExportOptions{ID: "session-one", Scope: "all", Format: "jsonl", Encoding: "utf-8"}); e != nil {
+	if _, e := s.Export(file, ExportOptions{ID: "session-one", Scope: "all", Format: "jsonl", Encoding: "utf-8"}); e != nil {
 		t.Fatal(e)
 	}
 	data, _ := os.ReadFile(file)

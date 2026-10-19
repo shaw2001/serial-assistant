@@ -5,6 +5,8 @@ package edge
 
 import (
 	"encoding/base64"
+	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -22,6 +24,8 @@ type Chromium struct {
 	initialDocumentURI      string
 	newWindowRequested      *securityWindowHandler
 	allowDocument           bool
+	backgroundHR            uint32
+	backgroundARGB          uint32
 	documentLoaded          bool
 
 	hwnd                  uintptr
@@ -40,7 +44,8 @@ type Chromium struct {
 	environment *ICoreWebView2Environment
 
 	// Settings
-	DataPath string
+	DataPath                string
+	BrowserExecutableFolder string
 
 	// permissions
 	permissions      map[CoreWebView2PermissionKind]CoreWebView2PermissionState
@@ -96,7 +101,11 @@ func (e *Chromium) Embed(hwnd uintptr) bool {
 		dataPath = filepath.Join(os.Getenv("AppData"), currentExeName)
 	}
 
-	res, err := createCoreWebView2EnvironmentWithOptions(nil, windows.StringToUTF16Ptr(dataPath), 0, e.envCompleted)
+	var browserFolder *uint16
+	if e.BrowserExecutableFolder != "" {
+		browserFolder = windows.StringToUTF16Ptr(e.BrowserExecutableFolder)
+	}
+	res, err := createCoreWebView2EnvironmentWithOptions(browserFolder, windows.StringToUTF16Ptr(dataPath), 0, e.envCompleted)
 	if err != nil {
 		log.Printf("Error calling Webview2Loader: %v", err)
 		return false
@@ -133,16 +142,35 @@ func (e *Chromium) Navigate(url string) {
 }
 
 func (e *Chromium) NavigateToString(htmlContent string) {
+	_ = e.NavigateToStringChecked(htmlContent)
+}
+
+// NavigateToStringChecked returns the HRESULT of NavigateToString. WebView2
+// answers E_INVALIDARG when the page's data: URL is over Chromium's 2 MiB cap.
+func (e *Chromium) NavigateToStringChecked(htmlContent string) error {
 	securityTrace("NavigateToString loaded=%t length=%d", e.documentLoaded, len(htmlContent))
 	if e.documentLoaded {
-		return
+		return nil
+	}
+	if e.webview == nil {
+		return errors.New("WebView2 is not ready")
+	}
+	content, err := windows.UTF16PtrFromString(htmlContent)
+	if err != nil {
+		return err
 	}
 	e.initialDocumentURI = "data:text/html;charset=utf-8;base64," + base64.StdEncoding.EncodeToString([]byte(htmlContent))
 	e.allowDocument = true
-	_, _, _ = e.webview.vtbl.NavigateToString.Call(
+	hr, _, _ := e.webview.vtbl.NavigateToString.Call(
 		uintptr(unsafe.Pointer(e.webview)),
-		uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(htmlContent))),
+		uintptr(unsafe.Pointer(content)),
 	)
+	if int32(hr) < 0 {
+		e.allowDocument = false
+		e.initialDocumentURI = ""
+		return fmt.Errorf("NavigateToString HRESULT 0x%08x (page %d bytes)", uint32(hr), len(htmlContent))
+	}
+	return nil
 }
 
 func (e *Chromium) Init(script string) {
@@ -210,6 +238,18 @@ func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller
 	}
 	_, _, _ = controller.vtbl.AddRef.Call(uintptr(unsafe.Pointer(controller)))
 	e.controller = controller
+	// Opaque white: the window never shows the desktop through the page.
+	e.backgroundHR = 0xFFFFFFFF
+	e.backgroundARGB = 0xFFFFFFFF
+	if ctrl2 := controller.GetICoreWebView2Controller2(); ctrl2 != nil {
+		// COREWEBVIEW2_COLOR {A,R,G,B} is passed by value; all 0xFF is opaque white.
+		hr, _, _ := ctrl2.vtbl.PutDefaultBackgroundColor.Call(uintptr(unsafe.Pointer(ctrl2)), 0xFFFFFFFF)
+		e.backgroundHR = uint32(hr)
+		var c COREWEBVIEW2_COLOR
+		if hr, _, _ := ctrl2.vtbl.GetDefaultBackgroundColor.Call(uintptr(unsafe.Pointer(ctrl2)), uintptr(unsafe.Pointer(&c))); int32(hr) >= 0 {
+			e.backgroundARGB = uint32(c.A)<<24 | uint32(c.R)<<16 | uint32(c.G)<<8 | uint32(c.B)
+		}
+	}
 
 	var token _EventRegistrationToken
 	_, _, _ = controller.vtbl.GetCoreWebView2.Call(
@@ -401,4 +441,43 @@ func (e *Chromium) Focus() {
 		return
 	}
 	_ = e.controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC)
+}
+
+// BackgroundState reports the HRESULT of put_DefaultBackgroundColor and the
+// colour WebView2 reads back (0x00000000 means transparent). 0xFFFFFFFF in
+// both means ICoreWebView2Controller2 was unavailable.
+func (e *Chromium) BackgroundState() (hr uint32, argb uint32) {
+	return e.backgroundHR, e.backgroundARGB
+}
+
+// RefreshHost re-applies the controller bounds and visibility after the host
+// window changed size or state (maximize, restore, snap), and returns the
+// client rectangle that was applied.
+// SetHostVisible toggles WebView2 visibility without touching its bounds, so a
+// minimize never collapses the controller to the 0x0 iconic client rect.
+func (e *Chromium) SetHostVisible(visible bool) {
+	if e.controller == nil {
+		return
+	}
+	_ = e.controller.PutIsVisible(visible)
+}
+
+// NotifyMoved tells WebView2 that the host window moved (monitor/DPI changes).
+func (e *Chromium) NotifyMoved() {
+	if e.controller == nil {
+		return
+	}
+	_ = e.controller.NotifyParentWindowPositionChanged()
+}
+
+func (e *Chromium) RefreshHost(visible bool) w32.Rect {
+	var bounds w32.Rect
+	if e.controller == nil {
+		return bounds
+	}
+	_, _, _ = w32.User32GetClientRect.Call(e.hwnd, uintptr(unsafe.Pointer(&bounds)))
+	e.Resize()
+	_ = e.controller.PutIsVisible(visible)
+	_ = e.controller.NotifyParentWindowPositionChanged()
+	return bounds
 }

@@ -1,54 +1,182 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'"><title>串口助手 v0.2.0</title><link rel="stylesheet" href="app.css"></head><body>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>串口助手 v0.3.3</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
 <div id="sui2">
 <header class="su-header">
-<div class="su-brand"><span class="su-brand-name">串口助手</span><span class="su-subtitle">本地工作台</span><span class="su-demo-tag" data-el="version">v0.2.0</span></div>
-<div class="su-header-actions"><label class="su-check"><input data-el="always-top" type="checkbox"/><span>窗口置顶</span></label><button data-action="profile" type="button">配置方案</button><button data-action="help" type="button">使用说明</button></div>
+  <div class="su-brand" title="串口助手">
+    <span class="su-logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h3l3-7 4 14 3-7h5"/></svg></span>
+    <span class="su-brand-name">串口助手</span>
+  </div>
+  <div class="su-tabs" data-el="tabs" role="tablist" aria-label="多串口会话"></div>
+  <button class="su-icon su-icon-sm" data-action="add-port" data-el="add-port" type="button" title="添加串口或 J-Link RTT" aria-label="添加串口或 J-Link RTT"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+  <span class="su-sr" data-el="session-count">0 / 4 个设备</span>
+  <span class="su-vsep" aria-hidden="true"></span>
+  <div class="su-conn">
+    <label class="su-fld su-port su-serial-only" title="端口">
+      <span class="su-sr">当前设备</span>
+      <select data-el="port" title="当前设备"><option value="">扫描串口…</option></select>
+      <span class="su-port-meta hide-md" data-el="port-meta"></span>
+    </label>
+    <button class="su-icon su-serial-only" data-action="refresh" title="刷新端口" type="button" aria-label="刷新串口列表"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
+    <button class="su-icon su-serial-only" data-action="manual-port" title="手动输入串口" type="button" aria-label="手动输入串口"><svg viewBox="0 0 24 24"><path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-3L16.5 4.5a2 2 0 0 0-3 0L3 15v5z"/></svg></button>
+    <label class="su-fld su-serial-only" title="波特率">
+      <span class="su-sr">波特率</span>
+      <select data-el="baud" title="波特率"><option>110</option><option>300</option><option>600</option><option>1200</option><option>2400</option><option>4800</option><option>9600</option><option>14400</option><option>19200</option><option>28800</option><option>38400</option><option>57600</option><option>76800</option><option selected>115200</option><option>128000</option><option>230400</option><option>256000</option><option>460800</option><option>500000</option><option>576000</option><option>921600</option><option>1000000</option><option>1500000</option><option>2000000</option><option>3000000</option><option value="custom">自定义…</option></select>
+    </label>
+    <label class="su-fld su-custom-baud su-serial-only" data-el="custom-baud-field" hidden>
+      <span class="su-sr">自定义波特率</span>
+      <input autocomplete="off" data-el="custom-baud" inputmode="numeric" maxlength="8" pattern="[0-9]+" placeholder="自定义波特率" title="自定义波特率" type="text" value="250000">
+    </label>
+    <button class="su-fld su-rtt-summary su-rtt-only" data-action="rtt-settings" data-el="rtt-summary" type="button" title="J-Link RTT 设置"></button>
+    <button class="su-fld su-params su-serial-only" data-action="params" data-el="params-summary" title="数据位/校验/停止位 · 流控" type="button">8N1 · 无流控</button>
+    <button class="su-btn su-connect" data-action="connect" data-el="connect" disabled type="button">连接</button>
+    <button class="su-btn su-serial-only" data-action="reconnect" data-el="reconnect" type="button" hidden>应用并重连</button>
+  </div>
+  <span class="su-sp"></span>
+  <div class="su-toptools">
+    <button class="su-prof" data-action="profile" type="button" title="配置方案"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="su-prof-label hide-md">配置方案</span></button>
+    <label class="su-icon su-pin" title="窗口置顶">
+      <input data-el="always-top" type="checkbox">
+      <svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 4 3H6l4-3zM12 13v7"/></svg>
+      <span class="su-sr">窗口置顶</span>
+    </label>
+    <button class="su-icon" data-action="help" type="button" title="使用说明" aria-label="使用说明"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg></button>
+  </div>
+  <div class="su-wctl">
+    <button type="button" data-action="win-min" title="最小化" aria-label="最小化"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
+    <button type="button" data-action="win-max" title="最大化" aria-label="最大化"><svg viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="1.2"/></svg></button>
+    <button type="button" class="su-close" data-action="win-close" title="关闭" aria-label="关闭"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+  </div>
 </header>
-<nav aria-label="多串口会话与连接" class="su-session-bar"><div class="su-tabs" data-el="tabs" role="tablist"></div><button class="su-add-port" data-action="add-port" data-el="add-port" type="button">添加串口</button><span class="su-session-count" data-el="session-count">0 / 4 个设备</span>
-<div class="su-conn-strip">
-<label class="su-field su-port"><span class="su-sr">当前设备</span><select data-el="port" title="当前设备"><option value="">扫描串口…</option></select></label>
-<button class="su-icon-btn" data-action="refresh" title="刷新串口列表" type="button"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
-<button class="su-icon-btn" data-action="manual-port" title="手动输入串口" type="button"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5l2 2L6 12l-2.6.6L4 10z"/></svg></button>
-<label class="su-field su-baud"><span class="su-sr">波特率</span><select data-el="baud" title="波特率"><option>110</option><option>300</option><option>600</option><option>1200</option><option>2400</option><option>4800</option><option>9600</option><option>14400</option><option>19200</option><option>28800</option><option>38400</option><option>57600</option><option>76800</option><option selected="">115200</option><option>128000</option><option>230400</option><option>256000</option><option>460800</option><option>500000</option><option>576000</option><option>921600</option><option>1000000</option><option>1500000</option><option>2000000</option><option>3000000</option><option value="custom">自定义…</option></select></label>
-<label class="su-field su-custom-baud" data-el="custom-baud-field" hidden=""><span class="su-sr">自定义波特率</span><input autocomplete="off" data-el="custom-baud" inputmode="numeric" maxlength="8" pattern="[0-9]+" placeholder="自定义波特率" title="自定义波特率" type="text" value="250000"/></label>
-<button class="su-params-btn" data-action="params" data-el="params-summary" title="串口参数" type="button">8N1 · 无流控</button>
-<button class="su-primary su-connect" data-action="connect" data-el="connect" disabled="" type="button">连接</button>
-<button data-action="reconnect" data-el="reconnect" class="su-primary su-reconnect" type="button" hidden>应用并重连</button>
-<div class="su-connection-state" role="status"><span class="su-status-dot" data-el="status-dot"></span><span data-el="status">未连接</span></div>
-</div></nav>
-<div class="su-baud-error" data-el="baud-error" hidden="" role="alert"></div>
+<div class="su-baud-error" data-el="baud-error" hidden role="alert"></div>
 <main class="su-workspace" id="su2-workspace" role="tabpanel">
-<div class="su-main-column">
-<section aria-label="收发日志" class="su-log-panel">
-<div class="su-log-toolbar"><h2>收发日志</h2><div aria-label="显示模式" class="su-segment" role="group"><button aria-pressed="true" data-mode="text" type="button">文本</button><button aria-pressed="false" data-mode="hex" type="button">HEX</button><button aria-pressed="false" data-mode="mixed" type="button">混合</button></div><label class="su-receive-encoding"><span class="su-sr">接收编码</span><select aria-label="接收编码" data-el="receive-encoding"><option value="utf-8">接收 UTF-8</option><option value="gbk">接收 GBK</option><option value="ascii">接收 ASCII</option></select></label><div class="su-log-actions"><button aria-pressed="false" data-action="pause" data-el="pause" type="button">暂停显示</button><button data-action="clear" type="button">清空显示</button><button data-action="export" type="button">导出日志</button></div>
-<div class="su-toolbar-right">
-<div class="su-search-box"><button class="su-icon-btn su-search-toggle" data-action="toggle-search" title="搜索日志（Ctrl+F）" type="button"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg></button><input autocomplete="off" data-el="search" placeholder="搜索缓存日志…" type="search"/><span class="su-search-count" data-el="search-count">0 条匹配</span><button aria-label="上一条匹配" class="su-small" data-action="prev" type="button">上一条</button><button aria-label="下一条匹配" class="su-small" data-action="next" type="button">下一条</button><label class="su-check"><input data-el="only-matches" type="checkbox"/><span>只看匹配</span></label><label class="su-check"><input checked="" data-el="highlight" type="checkbox"/><span>高亮</span></label></div>
-<div class="su-display-box"><button class="su-icon-btn" data-action="toggle-display" title="显示选项" type="button"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 2.5v1.8M8 11.7v1.8M2.5 8h1.8M11.7 8h1.8M4.1 4.1l1.3 1.3M10.6 10.6l1.3 1.3M11.9 4.1l-1.3 1.3M5.4 10.6l-1.3 1.3"/></svg></button>
-<div class="su-display-pop" data-el="display-pop" hidden=""><label>接收换行 <select data-el="receive-newline"><option value="auto">自动 CR / LF / CRLF</option><option value="crlf">仅 CRLF</option><option value="lf">仅 LF</option><option value="cr">仅 CR</option><option value="none">不按换行符分行</option><option value="batch">按接收批次</option></select></label><label>字号 <select data-el="log-font-size"><option>12</option><option selected>14</option><option>16</option><option>18</option><option>20</option></select></label><label class="su-check"><input data-el="wrap-lines" type="checkbox"><span>自动折行</span></label><label class="su-check"><input data-el="show-meta" type="checkbox"><span>时间 / 方向</span></label><p class="su-display-hint">等宽文本 · 保留设备原始字节</p></div></div>
-</div></div>
-<div class="su-pause-banner" data-el="pause-banner" hidden=""><span data-el="pause-text">显示已暂停，接收与会话记录继续。</span><button data-action="pause" type="button">恢复显示</button></div>
-<div aria-label="日志内容，时间为电脑记录时间" class="su-log-screen" data-el="screen" role="region"><div class="su-log-column-labels"><span>时间</span><span>方向</span><span>内容</span></div><div data-el="logs"></div></div>
-<div class="su-log-status"><div class="su-statistics"><span>RX <b data-el="rx">0 B</b></span><span>TX <b data-el="tx">0 B</b></span><span data-el="records">0 条显示</span></div><div class="su-record-options"><label class="su-check"><input checked="" data-el="autoscroll" type="checkbox"/><span>自动滚动</span></label><label class="su-check"><input checked="" data-el="capture" type="checkbox"/><span>记录会话</span></label></div></div>
-</section>
-<section aria-label="发送数据" class="su-send-panel">
-<div class="su-send-top"><h2>发送数据</h2><span class="su-send-target" data-el="send-target">未选择串口</span><span class="su-keyboard-hint" data-el="keyboard-hint" title="Shift+Tab 可离开发送框">Enter 发送 · Shift+Enter 换行 · Tab 补全</span><div class="su-send-config"><label><span class="su-sr">发送格式</span><select data-el="send-mode"><option value="text">文本</option><option value="hex">HEX</option></select></label><label><span class="su-sr">发送编码</span><select data-el="encoding"><option value="utf-8">UTF-8</option><option value="ascii">ASCII</option><option value="gbk">GBK</option></select></label><label><span class="su-sr">追加结尾符</span><select data-el="ending"><option value="none">无结尾符</option><option value="cr">追加 CR</option><option value="lf">追加 LF</option><option selected="" value="crlf">追加 CRLF</option></select></label></div></div>
-<div data-el="completion" class="su-completion" hidden><button type="button" data-el="recover-input" data-action="recover-input" hidden>确认设备输入状态</button><span data-el="completion-status"></span><div data-el="completion-candidates"></div></div>
-<textarea data-el="input" placeholder="输入指令；Enter 发送，Shift+Enter 换行，Tab 交给设备补全" rows="2" spellcheck="false"></textarea>
-<div class="su-inline-error" data-el="input-error" hidden="" role="alert"></div>
-<div class="su-send-bottom"><label class="su-history-label"><span class="su-sr">发送历史</span><select data-el="history"><option value="">发送历史</option></select></label><label class="su-interval"><span>间隔</span><input data-el="interval" max="3600000" min="10" step="10" type="number" value="1000"/><span>ms</span></label><button data-action="periodic" data-el="periodic" type="button">开始周期</button><span class="su-periodic-note" data-el="periodic-note" hidden=""></span><span class="su-byte-preview"><span data-el="preview-label">最终字节</span><code data-el="preview">等待输入</code><span data-el="length">0 B</span></span><button class="su-primary su-send-button" data-action="send" data-el="send" disabled="" type="button">发送</button></div>
-</section>
-</div>
-<aside aria-label="快捷命令" class="su-commands">
-<div class="su-command-heading"><h2>快捷指令</h2><button class="su-small" data-action="add-command" type="button">新增</button></div>
-<label class="su-command-group"><span class="su-sr">命令分组</span><select data-el="command-group"><option value="rtt">RT-Thread</option><option value="at">AT 指令</option><option value="binary">二进制协议</option><option value="custom">自定义</option></select></label>
-<div class="su-command-list" data-el="commands"></div>
-<div class="su-command-hint" data-el="command-hint">指令仅发送到当前串口。</div>
-</aside>
+  <section class="su-log-panel" aria-label="收发日志">
+    <div class="su-lh">
+      <div class="su-seg" role="group" aria-label="显示模式">
+        <button aria-pressed="true" data-mode="text" type="button">文本</button>
+        <button aria-pressed="false" data-mode="hex" type="button">HEX</button>
+        <button aria-pressed="false" data-mode="mixed" type="button">混合</button>
+      </div>
+      <label class="su-mini" title="接收编码">
+        <span class="su-sr">接收编码</span>
+        <select aria-label="接收编码" data-el="receive-encoding"><option value="utf-8">UTF-8</option><option value="gbk">GBK</option><option value="ascii">ASCII</option></select>
+      </label>
+      <span class="su-lsep" aria-hidden="true"></span>
+      <button class="su-tg" data-action="toggle-meta" type="button" title="显示时间戳" aria-pressed="false"><i></i>时间</button>
+      <button class="su-tg" data-action="toggle-meta" type="button" title="显示方向" aria-pressed="false"><i></i>方向</button>
+      <label class="su-tg" title="自动滚动到底部"><input data-el="autoscroll" type="checkbox" checked><i></i>自动滚动</label>
+      <label class="su-tg su-rec" title="实时写入日志文件（可选）。保存日志不需要开启：本次会话收到的全部数据都会保存。"><input data-el="capture" type="checkbox"><i></i><span class="su-rec-off">落盘</span><span class="su-rec-on">落盘中</span></label>
+      <span class="su-lsep hide-md" aria-hidden="true"></span>
+      <div class="su-filt hide-md" title="按方向过滤">
+        <button type="button" data-dir="RX" aria-pressed="true">RX</button>
+        <button type="button" data-dir="TX" aria-pressed="true">TX</button>
+        <button type="button" data-dir="SYS" aria-pressed="true">SYS</button>
+      </div>
+      <span class="su-sp"></span>
+      <label class="su-search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+        <input autocomplete="off" data-el="search" placeholder="搜索" title="搜索缓存日志（Ctrl+F）" type="search">
+        <span class="su-search-count" data-el="search-count"></span>
+        <button aria-label="上一条匹配" class="su-nav" data-action="prev" type="button"><svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg></button>
+        <button aria-label="下一条匹配" class="su-nav" data-action="next" type="button"><svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg></button>
+      </label>
+      <span class="su-lsep" aria-hidden="true"></span>
+      <span class="su-display-box">
+        <button class="su-icon su-icon-sm" data-action="toggle-display" title="显示选项" type="button" aria-label="显示选项"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg></button>
+        <div class="su-display-pop" data-el="display-pop" hidden>
+          <label>接收换行 <select data-el="receive-newline"><option value="auto">自动 CR / LF / CRLF</option><option value="crlf">仅 CRLF</option><option value="lf">仅 LF</option><option value="cr">仅 CR</option><option value="none">不按换行符分行</option><option value="batch">按接收批次</option></select></label>
+          <label>字号 <select data-el="log-font-size"><option>12</option><option selected>13</option><option>14</option><option>16</option><option>18</option><option>20</option><option>22</option><option>24</option></select></label>
+          <label class="su-check"><input data-el="wrap-lines" type="checkbox"><span>自动折行</span></label>
+          <label class="su-check"><input data-el="show-meta" type="checkbox"><span>时间 / 方向</span></label>
+          <label class="su-check"><input data-el="only-matches" type="checkbox"><span>只看匹配</span></label>
+          <label class="su-check"><input checked data-el="highlight" type="checkbox"><span>高亮关键字</span></label>
+          <p class="su-display-hint">等宽文本 · 保留设备原始字节。缓存行数、日志文件与版本号在使用说明中。</p>
+        </div>
+      </span>
+      <button class="su-icon su-icon-sm" data-action="pause" data-el="pause" title="暂停显示" type="button" aria-pressed="false" aria-label="暂停显示"><svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></button>
+      <button class="su-icon su-icon-sm" data-action="clear" title="清空显示" type="button" aria-label="清空显示"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+      <button class="su-icon su-icon-sm" data-action="export" title="保存日志（导出到文件）" type="button" aria-label="保存日志"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
+    </div>
+    <div class="su-log-screen" data-el="screen" role="region" aria-label="日志内容，时间为电脑记录时间">
+      <div class="su-pause-banner" data-el="pause-banner" hidden><span data-el="pause-text">显示已暂停，接收与会话记录继续。</span><button data-action="pause" type="button">恢复显示</button></div>
+      <div data-el="logs"></div>
+    </div>
+    <div class="su-send" aria-label="发送数据">
+      <div class="su-target" data-el="send-target" title="发送目标">未选择</div>
+      <div class="su-seg su-send-seg" role="group" aria-label="发送格式">
+        <button type="button" data-send-mode="text" aria-pressed="true">文本</button>
+        <button type="button" data-send-mode="hex" aria-pressed="false">HEX</button>
+        <select class="su-sr" data-el="send-mode" aria-label="发送格式"><option value="text">文本</option><option value="hex">HEX</option></select>
+      </div>
+      <div class="su-inp">
+        <span class="su-sr" data-el="keyboard-hint">Enter 发送 · Shift+Enter 换行 · Tab 补全</span>
+        <span class="su-sr" data-el="preview-label">最终字节</span>
+        <textarea data-el="input" placeholder="输入指令，Enter 发送" rows="1" spellcheck="false"></textarea>
+        <code class="su-preview hide-md" data-el="preview">等待输入</code>
+        <span class="su-bytes" data-el="length" title="最终字节数">0 B</span>
+        <label class="su-history" title="发送历史">
+          <span class="su-sr">发送历史</span>
+          <select data-el="history"><option value="">发送历史</option></select>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+        </label>
+        <button class="su-icon su-icon-sm" data-action="expand-input" title="展开多行" type="button" aria-label="展开多行"><svg viewBox="0 0 24 24"><path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4"/></svg></button>
+      </div>
+      <div class="su-opt">
+        <label class="su-mini" title="发送编码"><span class="su-sr">发送编码</span><select data-el="encoding"><option value="utf-8">UTF-8</option><option value="ascii">ASCII</option><option value="gbk">GBK</option></select></label>
+        <label class="su-mini" title="行尾"><span class="su-sr">追加结尾符</span><select data-el="ending"><option value="none">无结尾</option><option value="cr">+CR</option><option value="lf">+LF</option><option selected value="crlf">+CRLF</option></select></label>
+      </div>
+      <label class="su-period" title="周期发送">
+        <button data-action="periodic" data-el="periodic" type="button">周期</button>
+        <input data-el="interval" max="3600000" min="10" step="10" type="number" value="1000" aria-label="周期间隔">
+        <span>ms</span>
+      </label>
+      <span class="su-sr" data-el="periodic-note" hidden></span>
+      <button class="su-btn su-send-button" data-action="send" data-el="send" disabled type="button">发送</button>
+    </div>
+    <div class="su-completion" data-el="completion" hidden>
+      <button type="button" data-el="recover-input" data-action="recover-input" hidden>确认设备输入状态</button>
+      <span data-el="completion-status"></span>
+      <div data-el="completion-candidates"></div>
+    </div>
+    <div class="su-inline-error" data-el="input-error" hidden role="alert"></div>
+  </section>
+  <div class="su-rcol">
+    <aside class="su-commands" aria-label="快捷命令">
+      <div class="su-rh"><span class="su-rh-title">快捷指令</span>
+        <span class="su-sp"></span>
+        <label class="su-sr" for="su-command-group">指令分组</label>
+        <select id="su-command-group" data-el="command-group" title="按分组筛选；选中的分组也是新增指令的分组"><option value="all">全部</option><option value="rtt">RT-Thread</option><option value="at">AT 指令</option><option value="binary">Modbus</option><option value="custom">常用</option></select>
+        <button class="su-icon su-icon-sm" data-action="add-command" title="新增指令" type="button" aria-label="新增指令"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="su-icon su-icon-sm" data-action="toggle-rail" title="收起侧栏" type="button" aria-label="收起侧栏"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+      <label class="su-rsearch"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg><input data-el="command-filter" type="search" placeholder="筛选指令…" aria-label="筛选指令" autocomplete="off"></label>
+      <div class="su-command-list" data-el="commands"></div>
+      <div class="su-rfoot" data-el="command-hint">指令仅发送到当前串口。</div>
+    </aside>
+    <footer class="su-demo-footer su-stats" data-el="status-card" title="版本、缓存行数、日志目录和检查更新在使用说明中">
+      <div class="su-stat-row"><span>RX <b class="su-rxc" data-el="rx">0 B</b></span><span>TX <b class="su-txc" data-el="tx">0 B</b></span></div>
+      <div class="su-stat-row"><span class="su-recd"><i></i>落盘中</span><span data-el="rate">0 B/s</span><span data-el="uptime">00:00:00</span></div>
+      <span class="su-status-dot" data-el="status-dot" hidden></span>
+      <span class="su-sr" data-el="status">未连接</span>
+      <span class="su-sr" data-el="version">v0.3.3</span>
+      <span class="su-sr" data-el="records">0 条显示</span>
+      <span class="su-sr" data-el="session-info">本地运行 · 就绪</span>
+      <span class="su-sr" data-el="health"></span>
+      <button class="su-sr" data-action="check-update" type="button">检查更新</button>
+      <button class="su-sr" data-action="logs-directory" type="button">日志目录</button>
+    </footer>
+  </div>
 </main>
-<footer class="su-demo-footer"><button data-action="check-update" type="button">检查更新</button><button data-action="logs-directory" type="button">日志目录</button><span class="su-session-info" data-el="session-info">本地运行 · 就绪</span><span class="su-session-info" data-el="health"></span></footer>
-<div aria-live="polite" class="su-notice" data-el="notice" hidden="" role="status"></div>
-<div class="su-overlay" data-el="overlay" hidden=""><section aria-labelledby="su2-dialog-title" aria-modal="true" class="su-dialog" role="dialog"><header class="su-dialog-heading"><h2 data-el="dialog-title" id="su2-dialog-title"></h2><button aria-label="关闭对话框" data-action="close-dialog" type="button">关闭</button></header><div class="su-dialog-body" data-el="dialog-body"></div></section></div>
+<div aria-live="polite" class="su-notice" data-el="notice" hidden role="status"></div>
+<div class="su-overlay" data-el="overlay" hidden><section aria-labelledby="su2-dialog-title" aria-modal="true" class="su-dialog" role="dialog"><header class="su-dialog-heading"><h2 data-el="dialog-title" id="su2-dialog-title"></h2><button aria-label="关闭对话框" data-action="close-dialog" type="button">关闭</button></header><div class="su-dialog-body" data-el="dialog-body"></div></section></div>
 </div>
-
-<script src="app.js"></script></body></html>
+<script src="app.js"></script>
+</body>
+</html>
