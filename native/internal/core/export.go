@@ -22,23 +22,53 @@ type ExportOptions struct {
 	IDs      []uint64 `json:"ids"`
 }
 
-func (s *Service) Export(file string, o ExportOptions) error {
+// AppVersion is written into exported logs; main sets it to the build version.
+var AppVersion = "dev"
+
+// ErrNothingToExport is returned instead of writing a file with no records.
+var ErrNothingToExport = errors.New("当前会话没有可导出的记录。请先连接并收发数据后再导出。")
+
+// Export writes the session log to file and returns how many records it holds.
+// Scope "all" is the complete session: the in-memory full history (every
+// record since the session started, kept whether or not 落盘 is on and not
+// affected by 清屏) merged with any on-disk 落盘 journal, in sequence order
+// without duplicates.
+func (s *Service) Export(file string, o ExportOptions) (int, error) {
 	if !oneOf(o.Scope, "all", "cache", "visible") || !oneOf(o.Format, "txt", "json", "jsonl") || !oneOf(o.Encoding, "utf-8", "gbk", "ascii") || len(o.IDs) > 10000 {
-		return errors.New("日志导出参数无效。")
+		return 0, errors.New("日志导出参数无效。")
 	}
-	records, files, e := s.ExportSnapshot(o.ID, o.Scope, o.IDs)
+	var records []Record
+	var history []historyEntry
+	var files []string
+	var historyTrimmed uint64
+	var e error
+	if o.Scope == "all" {
+		history, files, historyTrimmed, e = s.snapshotAll(o.ID)
+	} else {
+		records, files, e = s.Records(o.ID, o.Scope, o.IDs)
+	}
 	if e != nil {
-		return e
+		return 0, e
+	}
+	if o.Scope == "all" && len(files) == 0 && len(history) == 0 {
+		return 0, ErrNothingToExport
+	}
+	if o.Scope != "all" && len(records) == 0 {
+		return 0, ErrNothingToExport
 	}
 	f, e := os.CreateTemp(filepath.Dir(file), ".export-*.tmp")
 	if e != nil {
-		return e
+		return 0, e
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
 	w := bufio.NewWriterSize(f, 65536)
 	snapshot, _ := s.Snapshot(o.ID)
-	meta := map[string]any{"type": "metadata", "version": "0.1.1", "session": snapshot, "scope": o.Scope}
+	meta := map[string]any{"type": "metadata", "version": AppVersion, "session": snapshot, "scope": o.Scope}
+	if historyTrimmed > 0 {
+		meta["historyTrimmed"] = historyTrimmed
+	}
+	count := 0
 	first := true
 	if o.Format == "json" {
 		data, _ := json.Marshal(meta)
@@ -48,9 +78,17 @@ func (s *Service) Export(file string, o ExportOptions) error {
 		w.Write(data)
 		w.WriteByte('\n')
 	} else {
-		fmt.Fprintln(w, "# 串口助手 v0.1.1 · TX 表示已提交驱动。")
+		path := ""
+		if m, ok := snapshot.(map[string]any); ok {
+			path, _ = m["path"].(string)
+		}
+		fmt.Fprintf(w, "# 串口助手 v%s · %s\n# 主机记录时间；TX 表示已提交驱动，设备应答请查看 RX。\n", AppVersion, path)
+		if historyTrimmed > 0 && len(files) == 0 {
+			fmt.Fprintf(w, "# 注意：最早的 %d 条记录超过 %d MiB 内存上限，未保留（开启“落盘”可完整写入磁盘）。\n", historyTrimmed, historyMaxBytes>>20)
+		}
 	}
 	writeRecord := func(r Record) error {
+		count++
 		if o.Format != "txt" {
 			data, _ := json.Marshal(r)
 			if o.Format == "json" && !first {
@@ -79,10 +117,25 @@ func (s *Service) Export(file string, o ExportOptions) error {
 		return e
 	}
 	if o.Scope == "all" {
+		// history is taken at the same freeze point as the journal files; both
+		// are in ascending sequence order.
+		next := 0
+		flushCacheBefore := func(seq uint64) error {
+			for next < len(history) && history[next].rec.Seq < seq {
+				if e := writeRecord(history[next].record()); e != nil {
+					return e
+				}
+				next++
+			}
+			for next < len(history) && history[next].rec.Seq == seq {
+				next++ // already written from the journal
+			}
+			return nil
+		}
 		for _, name := range files {
 			input, e := os.Open(name)
 			if e != nil {
-				return e
+				return 0, e
 			}
 			scan := bufio.NewScanner(input)
 			scan.Buffer(make([]byte, 65536), 256*1024)
@@ -90,52 +143,61 @@ func (s *Service) Export(file string, o ExportOptions) error {
 				var r Record
 				if e = json.Unmarshal(scan.Bytes(), &r); e != nil {
 					input.Close()
-					return e
+					return 0, e
+				}
+				if e = flushCacheBefore(r.Seq); e != nil {
+					input.Close()
+					return 0, e
 				}
 				if e = writeRecord(r); e != nil {
 					input.Close()
-					return e
+					return 0, e
 				}
 			}
 			e = scan.Err()
 			input.Close()
 			if e != nil {
-				return e
+				return 0, e
 			}
+		}
+		if e = flushCacheBefore(^uint64(0)); e != nil {
+			return 0, e
 		}
 	} else {
 		for _, r := range records {
 			if e = writeRecord(r); e != nil {
-				return e
+				return 0, e
 			}
 		}
 	}
 	if o.Format == "json" {
 		if _, e = io.WriteString(w, "\n]}\n"); e != nil {
-			return e
+			return 0, e
 		}
 	}
 	if e = w.Flush(); e != nil {
-		return e
+		return 0, e
 	}
 	if e = f.Sync(); e != nil {
-		return e
+		return 0, e
 	}
 	if e = f.Close(); e != nil {
-		return e
+		return 0, e
 	}
-	return os.Rename(f.Name(), file)
+	if count == 0 {
+		return 0, ErrNothingToExport
+	}
+	return count, os.Rename(f.Name(), file)
 }
 
-// Freeze disk segments at the export boundary while holding the session operation lock.
-// A new segment resumes capture before the potentially long export writes begin.
-func (s *Service) ExportSnapshot(id, scope string, ids []uint64) ([]Record, []string, error) {
+// snapshotAll freezes the 落盘 journal segments at the export boundary while
+// holding the session operation lock, and takes the full history at the same
+// point. A new segment resumes capture before the long export writes begin.
+// The history slice is copied; its entries are immutable.
+func (s *Service) snapshotAll(id string) ([]historyEntry, []string, uint64, error) {
 	x, e := s.get(id)
 	if e != nil {
-		return nil, nil, e
-	}
-	if scope != "all" {
-		return s.Records(id, scope, ids)
+		return nil, nil, 0, e
 	}
 	x.op.Lock()
 	defer x.op.Unlock()
@@ -147,7 +209,7 @@ func (s *Service) ExportSnapshot(id, scope string, ids []uint64) ([]Record, []st
 		next, e = NewJournal(s.directory, id)
 		if e != nil {
 			s.mu.Unlock()
-			return nil, nil, e
+			return nil, nil, 0, e
 		}
 	}
 	x.journal = next
@@ -159,15 +221,43 @@ func (s *Service) ExportSnapshot(id, scope string, ids []uint64) ([]Record, []st
 		s.mu.Unlock()
 	}
 	s.mu.Lock()
+	history := append([]historyEntry{}, x.history...)
+	trimmed := x.historyTrimmed
 	files := []string{}
 	for _, j := range x.oldJournals {
 		_, _, err, f := j.Stats()
 		if err != nil {
 			s.mu.Unlock()
-			return nil, nil, err
+			return nil, nil, 0, err
 		}
 		files = append(files, f...)
 	}
 	s.mu.Unlock()
-	return nil, files, nil
+	return history, files, trimmed, nil
+}
+
+// HasExportable reports whether Export would find at least one record, so the
+// save dialog is not shown for an empty session.
+func (s *Service) HasExportable(id, scope string, ids []uint64) (bool, error) {
+	if scope != "all" {
+		records, _, e := s.Records(id, scope, ids)
+		return len(records) > 0, e
+	}
+	x, e := s.get(id)
+	if e != nil {
+		return false, e
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(x.history) > 0 {
+		return true, nil
+	}
+	for _, j := range append(append([]*Journal{}, x.oldJournals...), x.journal) {
+		if j != nil {
+			if n, _, _, _ := j.Stats(); n > 0 {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }

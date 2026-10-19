@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -19,17 +18,18 @@ import (
 	"io.github.shaw2001/serialassistant/web"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 	"unsafe"
 )
 
 // version is injected at build time: -ldflags "-X main.version=1.2.3"
-var version = "0.2.0"
+var version = "0.3.3"
 
 const releaseRepo = "shaw2001/serial-assistant"
 
@@ -42,42 +42,58 @@ var callWindowProc = user32.NewProc("CallWindowProcW")
 var postMessage = user32.NewProc("PostMessageW")
 var showWindow = user32.NewProc("ShowWindow")
 var isZoomed = user32.NewProc("IsZoomed")
+var isIconic = user32.NewProc("IsIconic")
+var setForegroundWindow = user32.NewProc("SetForegroundWindow")
+var updateWindow = user32.NewProc("UpdateWindow")
+var redrawWindow = user32.NewProc("RedrawWindow")
+var setTimer = user32.NewProc("SetTimer")
+var killTimer = user32.NewProc("KillTimer")
 var getSystemMetrics = user32.NewProc("GetSystemMetrics")
 var getWindowRect = user32.NewProc("GetWindowRect")
 var releaseCapture = user32.NewProc("ReleaseCapture")
-var sendMessageW = user32.NewProc("SendMessageW")
-var getWindow = user32.NewProc("GetWindow")
-var defWindowProc = user32.NewProc("DefWindowProcW")
-var shellExecute = windows.NewLazySystemDLL("shell32.dll").NewProc("ShellExecuteW")
+var getClientRect = user32.NewProc("GetClientRect")
+var monitorFromRect = user32.NewProc("MonitorFromRect")
+var getDpiForWindow = user32.NewProc("GetDpiForWindow")
+var getSystemMetricsForDpi = user32.NewProc("GetSystemMetricsForDpi")
+var getMonitorInfo = user32.NewProc("GetMonitorInfoW")
+var invalidateRect = user32.NewProc("InvalidateRect")
+var getCursorPos = user32.NewProc("GetCursorPos")
+var beginPaint = user32.NewProc("BeginPaint")
+var endPaint = user32.NewProc("EndPaint")
+var fillRect = user32.NewProc("FillRect")
+var setClassLongPtr = user32.NewProc("SetClassLongPtrW")
+var getStockObject = gdi32.NewProc("GetStockObject")
+var shell32 = windows.NewLazySystemDLL("shell32.dll")
+var shellExecute = shell32.NewProc("ShellExecuteW")
+var shAppBarMessage = shell32.NewProc("SHAppBarMessage")
 var dwmapi = windows.NewLazySystemDLL("dwmapi.dll")
 var dwmSetWindowAttribute = dwmapi.NewProc("DwmSetWindowAttribute")
 var dwmExtendFrameIntoClientArea = dwmapi.NewProc("DwmExtendFrameIntoClientArea")
+var gdi32 = windows.NewLazySystemDLL("gdi32.dll")
 
-// DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWA_SYSTEMBACKDROP_TYPE.
+// DWM attributes used to keep the frame opaque, light and rounded.
 const (
 	dwmwaUseImmersiveDarkMode   = 20
 	dwmwaWindowCornerPreference = 33
-	dwmwaBorderColor            = 34
 	dwmwaCaptionColor           = 35
 	dwmwaSystemBackdropType     = 38
-	dwmBackdropMica             = 2         // DWMSBT_MAINWINDOW
-	dwmBackdropAcrylic          = 3         // DWMSBT_TRANSIENTWINDOW
-	dwmCornerRound              = 2         // DWMWCP_ROUND
-	dwmColorNone                = int32(-2) // DWMWA_COLOR_NONE
-	wsExNoRedirectionBitmap     = 0x00200000
-	gwlExStyle                  = ^uintptr(19) // -20
-	gwlWndProc                  = ^uintptr(3)  // GWLP_WNDPROC
+	dwmCornerRound              = 2            // DWMWCP_ROUND
+	gwlStyle                    = ^uintptr(15) // -16
+	wsCaption                   = 0x00C00000
+	wsThickFrame                = 0x00040000
+	wsSysMenu                   = 0x00080000
+	wsMinimizeBox               = 0x00020000
+	wsMaximizeBox               = 0x00010000
+	wsClipChildren              = 0x02000000  // host paint never covers the WebView2 child
+	gwlWndProc                  = ^uintptr(3) // GWLP_WNDPROC
 	wmNcHitTest                 = 0x0084
-	wmParentNotify              = 0x0210
 	wmNcLButtonDown             = 0x00A1
-	htTransparent               = ^uintptr(0) // HTTRANSPARENT
 )
 
-var hostWindow uintptr
-var childProc uintptr
-var childProcs sync.Map
-
-var glassOn atomic.Bool
+var lastSizeType atomic.Int32
+var sizeLogs atomic.Int32
+var refreshLogs atomic.Int32
+var refreshPending atomic.Bool
 
 type dwmMargins struct{ Left, Right, Top, Bottom int32 }
 
@@ -88,100 +104,37 @@ func setDwmAttribute(hwnd uintptr, attr uint32, value int32) uintptr {
 	return hr
 }
 
-// applyGlass makes the window a borderless Win11 Acrylic/Mica surface.
-// WebView2 must keep its redirection surface: WS_EX_NOREDIRECTIONBITMAP hides
-// the DWM backdrop behind an opaque client, which is why the glass looked solid.
-// It returns false on Windows 10 or when the backdrop attribute is rejected;
-// the page then paints the bundled wallpaper and keeps the same chrome.
-func applyGlass(hwnd uintptr) bool {
-	build := windows.RtlGetVersion()
-	_ = setDwmAttribute(hwnd, dwmwaWindowCornerPreference, dwmCornerRound)
-	_ = setDwmAttribute(hwnd, dwmwaUseImmersiveDarkMode, 1)
-	// Drop the caption/border fill so rounded corners stay transparent.
-	_ = setDwmAttribute(hwnd, dwmwaBorderColor, dwmColorNone)
-	_ = setDwmAttribute(hwnd, dwmwaCaptionColor, dwmColorNone)
-	margins := dwmMargins{-1, -1, -1, -1}
+// applyOpaqueFrame turns the borderless host into a plain opaque window:
+// Win11 rounded corners and the DWM shadow stay, every glass effect is off
+// (no system backdrop, no blur-behind, no full-sheet frame extension). Every
+// DWM HRESULT is written to the diagnostics log.
+func applyOpaqueFrame(hwnd uintptr, diag *diagLog) {
+	var buildNumber uint32
+	if v := windows.RtlGetVersion(); v != nil {
+		buildNumber = v.BuildNumber
+		diag.Printf("windows version=%d.%d build=%d", v.MajorVersion, v.MinorVersion, v.BuildNumber)
+	}
+	corner := setDwmAttribute(hwnd, dwmwaWindowCornerPreference, dwmCornerRound)
+	dark := setDwmAttribute(hwnd, dwmwaUseImmersiveDarkMode, 0)
+	caption := setDwmAttribute(hwnd, dwmwaCaptionColor, int32(hostBrushColor))
+	backdrop := uintptr(0)
+	if buildNumber >= 22621 {
+		backdrop = setDwmAttribute(hwnd, dwmwaSystemBackdropType, 1) // DWMSBT_NONE
+	}
+	m := opaqueFrameMargins()
+	margins := dwmMargins{m[0], m[1], m[2], m[3]}
 	extend, _, _ := dwmExtendFrameIntoClientArea.Call(hwnd, uintptr(unsafe.Pointer(&margins)))
-	ex, _, _ := getWindowLong.Call(hwnd, gwlExStyle)
-	if ex&wsExNoRedirectionBitmap != 0 {
-		_, _, _ = setWindowLong.Call(hwnd, gwlExStyle, ex&^wsExNoRedirectionBitmap)
-	}
 	_, _, _ = setWindowPos.Call(hwnd, 0, 0, 0, 0, 0, 0x0027) // SWP_NOSIZE|SWP_NOMOVE|SWP_NOZORDER|SWP_FRAMECHANGED
-	if build == nil || !glassBackdropSupported(build.BuildNumber) || hrFailed(extend) {
-		return false
-	}
-	if hrFailed(setDwmAttribute(hwnd, dwmwaSystemBackdropType, dwmBackdropAcrylic)) &&
-		hrFailed(setDwmAttribute(hwnd, dwmwaSystemBackdropType, dwmBackdropMica)) {
-		return false
-	}
-	return true
+	diag.Printf("opaque frame: corner=%#x darkmode=%#x caption=%#x backdropNone=%#x extendFrame%v=%#x", uint32(corner), uint32(dark), uint32(caption), uint32(backdrop), m, uint32(extend))
 }
 
-func borderZone(lp uintptr) bool {
-	if hostWindow == 0 {
-		return false
-	}
-	if zoomed, _, _ := isZoomed.Call(hostWindow); zoomed != 0 {
-		return false
-	}
+// paintHostWhite fills the host client with solid white, so nothing but the
+// white page background can ever show around or before WebView2.
+func paintHostWhite(hwnd, hdc uintptr) {
 	var rect struct{ Left, Top, Right, Bottom int32 }
-	getWindowRect.Call(hostWindow, uintptr(unsafe.Pointer(&rect)))
-	x := int32(int16(lp & 0xffff))
-	y := int32(int16((lp >> 16) & 0xffff))
-	const border int32 = 8
-	return x < rect.Left+border || x >= rect.Right-border || y < rect.Top+border || y >= rect.Bottom-border
-}
-
-func subclassChild(hwnd uintptr) {
-	if hwnd == 0 || hwnd == hostWindow || childProc == 0 {
-		return
-	}
-	if _, ok := childProcs.Load(hwnd); ok {
-		return
-	}
-	prev, _, _ := setWindowLong.Call(hwnd, gwlWndProc, childProc)
-	if prev == 0 || prev == childProc {
-		return
-	}
-	childProcs.Store(hwnd, prev)
-}
-
-func subclassTree(root uintptr) {
-	var walk func(uintptr, int)
-	walk = func(hwnd uintptr, depth int) {
-		if hwnd == 0 || depth > 8 {
-			return
-		}
-		child, _, _ := getWindow.Call(hwnd, 5) // GW_CHILD
-		for i := 0; child != 0 && i < 32; i++ {
-			subclassChild(child)
-			walk(child, depth+1)
-			next, _, _ := getWindow.Call(child, 2) // GW_HWNDNEXT
-			if next == 0 || next == child || next == hwnd {
-				break
-			}
-			child = next
-		}
-	}
-	walk(root, 0)
-}
-
-func installChildHooks(hwnd uintptr) {
-	hostWindow = hwnd
-	if childProc == 0 {
-		childProc = windows.NewCallback(func(hwnd, msg, wp, lp uintptr) uintptr {
-			if msg == wmNcHitTest && borderZone(lp) {
-				return htTransparent
-			}
-			if orig, ok := childProcs.Load(hwnd); ok {
-				r, _, _ := callWindowProc.Call(orig.(uintptr), hwnd, msg, wp, lp)
-				return r
-			}
-			r, _, _ := defWindowProc.Call(hwnd, msg, wp, lp)
-			return r
-		})
-	}
-	subclassTree(hwnd)
+	getClientRect.Call(hwnd, uintptr(unsafe.Pointer(&rect)))
+	brush, _, _ := getStockObject.Call(0) // WHITE_BRUSH
+	fillRect.Call(hdc, uintptr(unsafe.Pointer(&rect)), brush)
 }
 
 func chromeHit(cmd string) uintptr {
@@ -209,8 +162,10 @@ func chromeHit(cmd string) uintptr {
 	}
 }
 
-// beginChromeMove starts the system move/resize loop while the mouse button is
-// still down. It must run on the UI thread inside the web message callback.
+// beginChromeMove hands a page drag/resize gesture to the system move/size
+// loop, the way tao/winit do: release capture, then post WM_NCLBUTTONDOWN with
+// the hit-test code and the cursor position. Posting (not sending) keeps the
+// modal loop out of the WebView2 message callback.
 func beginChromeMove(hwnd, hit uintptr) {
 	if hwnd == 0 || hit == 0 {
 		return
@@ -220,16 +175,11 @@ func beginChromeMove(hwnd, hit uintptr) {
 			return
 		}
 	}
+	var pt struct{ X, Y int32 }
+	getCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
+	lp := uintptr(uint32(uint16(int16(pt.X))) | uint32(uint16(int16(pt.Y)))<<16)
 	releaseCapture.Call()
-	sendMessageW.Call(hwnd, wmNcLButtonDown, hit, 0)
-}
-
-func setImmersiveDark(hwnd uintptr, dark bool) {
-	value := int32(0)
-	if dark {
-		value = 1
-	}
-	_ = setDwmAttribute(hwnd, dwmwaUseImmersiveDarkMode, value)
+	postMessage.Call(hwnd, wmNcLButtonDown, hit, lp)
 }
 
 func windowCommand(hwnd uintptr, cmd string) {
@@ -303,9 +253,28 @@ func main() {
 		alert(e.Error())
 		return
 	}
-	// The shared WebView2 runtime is detected before constructing the native window.
-	runtimeVersion, detectError := webviewloader.GetInstalledVersion()
-	if detectError != nil || runtimeVersion == "" {
+	diag := openDiagLog(filepath.Join(dir, "serial-assistant-diag.log"))
+	if smoke {
+		diag = nil
+	}
+	core.AppVersion = version
+	diag.Printf("---- start v%s %s/%s", version, runtime.GOOS, runtime.GOARCH)
+	// A portable package ships a WebView2 Fixed Version runtime next to the EXE.
+	// Use it when present; otherwise fall back to the system Evergreen runtime.
+	var browserFolder, runtimeVersion string
+	var detectError error
+	if exePath, err := os.Executable(); err == nil {
+		browserFolder, runtimeVersion = findBundledRuntime(filepath.Dir(exePath))
+	}
+	if browserFolder != "" {
+		diag.Printf("webview2 bundled fixed runtime=%q version=%s", browserFolder, runtimeVersion)
+		grantFixedRuntimeAccess(browserFolder, diag)
+	} else {
+		// The shared WebView2 runtime is detected before constructing the native window.
+		runtimeVersion, detectError = webviewloader.GetInstalledVersion()
+		diag.Printf("webview2 evergreen runtime version=%s err=%v", runtimeVersion, detectError)
+	}
+	if browserFolder == "" && (detectError != nil || runtimeVersion == "") {
 		alert("需要 Microsoft WebView2 Runtime。Windows 11 和多数 Windows 10 已自带。\n请从 https://developer.microsoft.com/microsoft-edge/webview2 下载 Evergreen Runtime 后，再运行本 EXE。")
 		if smoke {
 			os.Exit(1)
@@ -318,10 +287,10 @@ func main() {
 		return
 	}
 	bridgeToken := hex.EncodeToString(key)
-	// 0x00000000 is the documented transparent WebView2 background (AARRGGBB).
-	// A bare "0" is ignored by some runtimes and leaves an opaque black client.
-	_ = os.Setenv("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "0x00000000")
-	w := webview.NewWithOptions(webview.WebViewOptions{DataPath: filepath.Join(dir, "WebView2"), AutoFocus: true, WindowOptions: webview.WindowOptions{Title: "串口助手 · v" + version, Width: 1440, Height: 900}})
+	// Opaque white WebView2 background (AARRGGBB); the controller sets the
+	// same colour through DefaultBackgroundColor.
+	_ = os.Setenv("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", webviewBackgroundEnv)
+	w := webview.NewWithOptions(webview.WebViewOptions{DataPath: filepath.Join(dir, "WebView2"), BrowserExecutableFolder: browserFolder, AutoFocus: true, WindowOptions: webview.WindowOptions{Hidden: true, Title: "串口助手 · v" + version, Width: 1440, Height: 900}})
 	if w == nil {
 		alert("窗口初始化失败。")
 		if smoke {
@@ -331,28 +300,93 @@ func main() {
 	}
 	defer w.Destroy()
 	w.SetSize(1024, 640, webview.HintMin)
-	service := core.NewService(filepath.Join(dir, "logs"), core.OpenSerial)
+	core.RTTDiag = diag.Printf
+	service := core.NewService(filepath.Join(dir, "logs"), core.OpenAny)
 	defer service.Shutdown()
 	var quitting, closing atomic.Bool
 	var smokeDone atomic.Bool
 	var original uintptr
+	// refreshHost re-applies the WebView2 bounds to the full client rectangle,
+	// makes the controller visible and forces the host and its WebView2 child
+	// windows to repaint. It is a no-op while the window is minimized.
+	surface := &webviewSurface{w: w}
+	refreshHost := func(hwnd uintptr, reason string) {
+		if iconic, _, _ := isIconic.Call(hwnd); iconic != 0 {
+			return
+		}
+		var client rect32
+		getClientRect.Call(hwnd, uintptr(unsafe.Pointer(&client)))
+		surface.hwnd = hwnd
+		applied := refreshHostSurface(surface, client)
+		if refreshLogs.Add(1) <= 60 {
+			diag.Printf("host refresh reason=%s visible=true bounds=%t client=(%d,%d,%d,%d)", reason, applied, client.Left, client.Top, client.Right, client.Bottom)
+		}
+	}
+	// scheduleRefresh refreshes again after the current restore/show/activate
+	// burst: once from the queue (posted message) and once after a short timer,
+	// when the Win11 restore animation has ended and the client rect is final.
+	scheduleRefresh := func(hwnd uintptr) {
+		if refreshPending.CompareAndSwap(false, true) {
+			postMessage.Call(hwnd, wmAppRefreshHost, 0, 0)
+		}
+		setTimer.Call(hwnd, refreshHostTimerID, refreshHostDelayMs, 0)
+	}
 	callback := windows.NewCallback(func(hwnd, msg, wp, lp uintptr) uintptr {
-		if msg == 0x0083 && wp != 0 { // WM_NCCALCSIZE: client area fills the borderless window
-			if zoomed, _, _ := isZoomed.Call(hwnd); zoomed != 0 {
-				frameX, _, _ := getSystemMetrics.Call(32)
-				padX, _, _ := getSystemMetrics.Call(92)
-				frameY, _, _ := getSystemMetrics.Call(33)
-				padY, _, _ := getSystemMetrics.Call(93)
-				r := (*struct{ Left, Top, Right, Bottom int32 })(unsafe.Pointer(lp))
-				r.Left += int32(frameX + padX)
-				r.Top += int32(frameY + padY)
-				r.Right -= int32(frameX + padX)
-				r.Bottom -= int32(frameY + padY)
+		if msg == wmAppRefreshHost {
+			refreshPending.Store(false)
+			refreshHost(hwnd, "posted")
+			return 0
+		}
+		if msg == 0x0113 && wp == refreshHostTimerID { // WM_TIMER
+			killTimer.Call(hwnd, refreshHostTimerID)
+			refreshHost(hwnd, "timer")
+			return 0
+		}
+		if msg == wmSize { // WM_SIZE: handled here instead of the library's plain Resize
+			kind := map[uintptr]string{0: "restored", 1: "minimized", 2: "maximized"}[wp]
+			// SIZE_MINIMIZED is deliberately a no-op: WebView2 is neither hidden
+			// nor shrunk to the iconic client, so nothing has to be undone later.
+			switch hostActionFor(uint32(msg), wp, 0) {
+			case hostRefreshNow:
+				refreshHost(hwnd, "wm_size-"+kind)
+				scheduleRefresh(hwnd)
+			}
+			if prev := lastSizeType.Swap(int32(wp)); prev != int32(wp) || sizeLogs.Add(1) <= 8 {
+				diag.Printf("wm_size type=%s(%d) lparam=%dx%d", kind, wp, lp&0xffff, (lp>>16)&0xffff)
 			}
 			return 0
 		}
-		if msg == wmParentNotify && uint16(wp) == 1 { // child created; WebView2 adds HWNDs late
-			subclassTree(hwnd)
+		if msg == wmShowWindow || msg == wmActivate || msg == wmSysCommand || msg == wmWindowPosChanged || msg == wmDisplayChange || msg == wmDpiChanged {
+			var flags uint32
+			if msg == wmWindowPosChanged && lp != 0 {
+				flags = *(*uint32)(unsafe.Pointer(lp + windowPosFlagOffset))
+			}
+			if hostActionFor(uint32(msg), wp, flags) == hostRefreshLater {
+				result, _, _ := callWindowProc.Call(original, hwnd, msg, wp, lp)
+				scheduleRefresh(hwnd)
+				return result
+			}
+		}
+		if msg == 0x0083 && wp != 0 { // WM_NCCALCSIZE: client area fills the borderless window
+			if zoomed, _, _ := isZoomed.Call(hwnd); zoomed != 0 {
+				// A maximized window overhangs the monitor by its resize frame.
+				// Clamp the client to the monitor work area so nothing is cut
+				// off and the taskbar stays visible.
+				r := (*rect32)(unsafe.Pointer(lp))
+				before := *r
+				work, ok := monitorWorkArea(before)
+				fx, fy := resizeFrame(hwnd)
+				client, source := maximizedClientRect(before, work, ok, fx, fy)
+				*r = client
+				if lastSizeType.Load() != 2 || source != "work-area" {
+					diag.Printf("nccalcsize maximized window=%v work=%v ok=%t frame=%d,%d client=%v source=%s", before, work, ok, fx, fy, client, source)
+				}
+			}
+			return 0
+		}
+		if msg == 0x0086 { // WM_NCACTIVATE: there is no non-client frame to repaint
+			r, _, _ := callWindowProc.Call(original, hwnd, msg, wp, ^uintptr(0))
+			return r
 		}
 		if msg == wmNcHitTest { // WM_NCHITTEST: keep the borderless window resizable
 			if zoomed, _, _ := isZoomed.Call(hwnd); zoomed == 0 {
@@ -385,8 +419,18 @@ func main() {
 				}
 			}
 		}
-		if msg == 0x0014 { // WM_ERASEBKGND: the page or the DWM backdrop paints this
+		if msg == 0x0014 { // WM_ERASEBKGND: solid white host
+			paintHostWhite(hwnd, wp)
 			return 1
+		}
+		if msg == 0x000F { // WM_PAINT: never leave the host surface unpainted (white)
+			var ps [72]byte // PAINTSTRUCT on amd64
+			hdc, _, _ := beginPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps[0])))
+			if hdc != 0 {
+				paintHostWhite(hwnd, hdc)
+			}
+			endPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps[0])))
+			return 0
 		}
 		if msg == 0x10 && !quitting.Load() {
 			if closing.CompareAndSwap(false, true) {
@@ -405,17 +449,56 @@ func main() {
 		return result
 	})
 	original, _, _ = setWindowLong.Call(uintptr(w.Window()), gwlWndProc, callback)
-	glassOn.Store(applyGlass(uintptr(w.Window())))
-	installChildHooks(uintptr(w.Window()))
+	hostHwnd := uintptr(w.Window())
+	// Drop WS_CAPTION so DWM never draws native title text or caption buttons
+	// (the doubled min/max/close); the page draws its own. WS_THICKFRAME, the
+	// system menu and min/max boxes stay for resize, snap and the taskbar.
+	style, _, _ := getWindowLong.Call(hostHwnd, gwlStyle)
+	newStyle := (style &^ wsCaption) | wsThickFrame | wsSysMenu | wsMinimizeBox | wsMaximizeBox | wsClipChildren
+	_, _, _ = setWindowLong.Call(hostHwnd, gwlStyle, newStyle)
+	diag.Printf("window style %#x -> %#x", style, newStyle)
+	_, _, _ = setClassLongPtr.Call(hostHwnd, ^uintptr(9), func() uintptr { b, _, _ := getStockObject.Call(0); return b }()) // GCLP_HBRBACKGROUND = WHITE_BRUSH
+	bgHR, bgARGB := w.BackgroundState()
+	diag.Printf("webview2 runtime=%s defaultBackground put hr=%#x readback=%#08x env=%q", runtimeVersion, bgHR, bgARGB, os.Getenv("WEBVIEW2_DEFAULT_BACKGROUND_COLOR"))
+	if int32(bgHR) < 0 || !backgroundIsOpaque(bgARGB) {
+		diag.Printf("warning: webview2 default background is not opaque white")
+	}
+	applyOpaqueFrame(hostHwnd, diag)
+	// The window was created hidden. It is shown once, when the page reports
+	// ready (laid out, fonts loaded) or after startupShowTimeout, whichever is
+	// first, so startup never flashes an empty white window.
+	var firstShow firstShowGate
+	showFirst := func(reason string) {
+		if !firstShow.claim(reason) {
+			return
+		}
+		w.Dispatch(func() {
+			hwnd := uintptr(w.Window())
+			showWindow.Call(hwnd, swShowDefault)
+			setForegroundWindow.Call(hwnd)
+			updateWindow.Call(hwnd)
+			refreshHost(hwnd, "first-show")
+			scheduleRefresh(hwnd)
+			diag.Printf("window first shown reason=%s after=%dms", reason, time.Since(started).Milliseconds())
+		})
+	}
+	_, _, _ = invalidateRect.Call(hostHwnd, 0, 1)
 	invoke := func(r request) (any, error) {
 		id, _ := arg[string](r, 0)
 		switch r.Method {
+		case "diag":
+			text, e := arg[string](r, 0)
+			if e != nil {
+				return nil, e
+			}
+			diag.Printf("page: %s", text)
+			return nil, nil
 		case "licenses":
 			bytes, e := web.Assets.ReadFile("THIRD_PARTY_NOTICES.txt")
 			return string(bytes), e
 		case "initialize":
 			config, warning := core.LoadConfig(filepath.Join(dir, "config.json"))
-			return map[string]any{"config": config, "warning": warning, "version": version, "platform": "win32", "glass": glassOn.Load(), "logsDirectory": filepath.Join(dir, "logs")}, nil
+			return map[string]any{"config": config, "warning": warning, "version": version, "platform": "win32", "logsDirectory": filepath.Join(dir, "logs"), "rttDefaults": core.DefaultRTTOptions()}, nil
 		case "listPorts":
 			ports, e := enumerator.GetDetailedPortsList()
 			if e != nil {
@@ -436,6 +519,16 @@ func main() {
 				return nil, e
 			}
 			return service.Open(id, o)
+		case "checkJLink":
+			tools, e := core.LocateJLink(id)
+			diag.Printf("jlink check dir=%q ok=%v", id, e == nil)
+			return tools, e
+		case "pickJLink":
+			file, e := fileDialog(w, false, "选择 J-Link 安装目录中的 JLinkRTTLogger.exe", "JLinkRTTLogger.exe", "exe")
+			if e != nil || file == "" {
+				return map[string]any{"canceled": true}, e
+			}
+			return map[string]any{"canceled": false, "dir": filepath.Dir(file)}, nil
 		case "close":
 			return service.Close(id)
 		case "remove":
@@ -531,12 +624,21 @@ func main() {
 			if e != nil {
 				return nil, e
 			}
+			if ok, e := service.HasExportable(o.ID, o.Scope, o.IDs); e != nil {
+				return nil, e
+			} else if !ok {
+				return nil, core.ErrNothingToExport
+			}
 			file, e := fileDialog(w, true, "导出串口日志", "serial-log-"+time.Now().Format("20060102-150405")+"."+o.Format, o.Format)
 			if e != nil || file == "" {
 				return map[string]any{"canceled": true}, e
 			}
-			e = service.Export(file, o)
-			return map[string]any{"canceled": false, "path": file}, e
+			count, e := service.Export(file, o)
+			diag.Printf("export log scope=%s format=%s records=%d err=%v", o.Scope, o.Format, count, e)
+			if e != nil {
+				return nil, e
+			}
+			return map[string]any{"canceled": false, "path": file, "count": count}, nil
 		case "showLogs":
 			path := filepath.Join(dir, "logs")
 			if e = os.MkdirAll(path, 0700); e != nil {
@@ -585,18 +687,6 @@ func main() {
 				return nil, errors.New("无法打开浏览器。")
 			}
 			return nil, nil
-		case "setTheme":
-			dark, e := arg[bool](r, 0)
-			if e != nil {
-				return nil, e
-			}
-			done := make(chan struct{})
-			w.Dispatch(func() {
-				setImmersiveDark(uintptr(w.Window()), dark)
-				close(done)
-			})
-			<-done
-			return nil, nil
 		case "windowCommand":
 			cmd, e := arg[string](r, 0)
 			if e != nil {
@@ -634,6 +724,8 @@ func main() {
 			if e != nil {
 				return nil, e
 			}
+			diag.Printf("page ready font=%v layout=%v screen=%v window=%v", data["fontReady"], data["layoutOK"], data["screenHeight"], data["windowHeight"])
+			showFirst("page-ready")
 			if smoke {
 				log.Printf("ready probe=%v version=%v font=%v layout=%v blocked=%d unauthorized=%v", data["securityProbe"], data["version"], data["fontReady"], data["layoutOK"], w.BlockedNavigations(), data["unauthorizedRejected"])
 				if data["securityProbe"] != true {
@@ -726,26 +818,25 @@ func main() {
 		return
 	}
 	nonce := hex.EncodeToString(nonceData)
-	html := string(htmlBytes)
-	start := strings.Index(html, "<meta http-equiv=\"Content-Security-Policy\"")
-	end := strings.Index(html[start:], ">") + start
-	policy := `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-` + nonce + `'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">`
-	html = html[:start] + policy + html[end+1:]
-	cssText := string(css)
-	if wall, err := web.Assets.ReadFile("wallpaper.jpg"); err == nil && len(wall) > 0 {
-		cssText = strings.ReplaceAll(cssText, "wallpaper.jpg", "data:image/jpeg;base64,"+base64.StdEncoding.EncodeToString(wall))
+	html, e := composeDocument(documentParts{HTML: htmlBytes, CSS: css, JS: js, Bridge: bridge, Font: font, Nonce: nonce, BridgeToken: bridgeToken})
+	if e != nil {
+		alert("界面资源无法加载：" + e.Error())
+		if smoke {
+			os.Exit(1)
+		}
+		return
 	}
-	cssText = strings.ReplaceAll(cssText, "OPPOSans-Regular.woff2", "data:font/woff2;base64,"+base64.StdEncoding.EncodeToString(font))
-	html = strings.Replace(html, `<link rel="stylesheet" href="app.css">`, "<style>"+cssText+"</style>", 1)
-	html = strings.Replace(html, `<script src="app.js"></script>`, `<script nonce="`+nonce+`">`+strings.Replace(string(bridge), "__BRIDGE_TOKEN__", bridgeToken, 1)+"\n"+strings.ReplaceAll(string(js), "</script", "<\\/script")+`</script>`, 1)
 	if smoke {
 		log.Print("setting HTML")
 	}
-	w.SetHtml(html)
-	// The controller exists only after the environment callback. Apply the
-	// backdrop again so Acrylic/Mica is not lost behind the first navigation.
-	glassOn.Store(applyGlass(uintptr(w.Window())))
-	subclassTree(uintptr(w.Window()))
+	time.AfterFunc(startupShowTimeout, func() { showFirst("timeout-fallback") })
+	if e = w.SetHtmlChecked(html); e != nil {
+		alert("界面加载失败：" + e.Error())
+		if smoke {
+			os.Exit(1)
+		}
+		return
+	}
 	if smoke {
 		go func() {
 			time.Sleep(25 * time.Second)
@@ -758,4 +849,100 @@ func main() {
 	if smoke && !smokeDone.Load() {
 		os.Exit(1)
 	}
+}
+
+// webviewSurface drives the real WebView2 controller for refreshHostSurface.
+type webviewSurface struct {
+	w    webview.WebView
+	hwnd uintptr
+}
+
+func (s *webviewSurface) SetVisible(v bool) { s.w.SetHostVisible(v) }
+func (s *webviewSurface) ResizeToClient()   { s.w.ResizeHost() }
+func (s *webviewSurface) NotifyMoved()      { s.w.NotifyHostMoved() }
+
+// Redraw repaints the host and every child HWND, including the WebView2
+// controller's own windows (RDW_INVALIDATE|RDW_ALLCHILDREN|RDW_UPDATENOW|RDW_FRAME).
+func (s *webviewSurface) Redraw() { redrawWindow.Call(s.hwnd, 0, 0, 0x1|0x80|0x100|0x400) }
+
+// grantFixedRuntimeAccess applies Microsoft's documented Windows 10 fix for a
+// Fixed Version runtime outside Program Files: since v120 the renderer runs in
+// an AppContainer and needs read/execute for ALL APPLICATION PACKAGES
+// (S-1-15-2-1) and ALL RESTRICTED APPLICATION PACKAGES (S-1-15-2-2).
+// Windows 11 is unaffected. It runs once per folder and is best effort.
+func grantFixedRuntimeAccess(folder string, diag *diagLog) {
+	v := windows.RtlGetVersion()
+	if v == nil || v.BuildNumber >= 22000 {
+		return
+	}
+	marker := filepath.Join(folder, ".serial-assistant-acl")
+	if _, err := os.Stat(marker); err == nil {
+		return
+	}
+	icacls := filepath.Join(os.Getenv("SystemRoot"), "System32", "icacls.exe")
+	cmd := exec.Command(icacls, folder, "/grant", "*S-1-15-2-2:(OI)(CI)(RX)", "/grant", "*S-1-15-2-1:(OI)(CI)(RX)", "/Q")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000} // CREATE_NO_WINDOW
+	out, err := cmd.CombinedOutput()
+	diag.Printf("icacls fixed runtime err=%v out=%s", err, strings.TrimSpace(string(out)))
+	if err == nil {
+		_ = os.WriteFile(marker, []byte("granted\r\n"), 0o644)
+	}
+}
+
+// monitorWorkArea is the work area (screen minus taskbar) of the monitor the
+// window is on. An auto-hide taskbar keeps a 1px strip so it can still appear.
+// monitorWorkArea is the work area of the monitor nearest to r (screen
+// coordinates). It deliberately takes the rectangle the window is about to
+// occupy, not the window handle: while a window is restored from the taskbar
+// it is still parked at the iconic position, and MonitorFromWindow then
+// answers with the primary monitor.
+func monitorWorkArea(r rect32) (rect32, bool) {
+	mon, _, _ := monitorFromRect.Call(uintptr(unsafe.Pointer(&r)), 2) // MONITOR_DEFAULTTONEAREST
+	if mon == 0 {
+		return rect32{}, false
+	}
+	var info struct {
+		Size          uint32
+		Monitor, Work rect32
+		Flags         uint32
+	}
+	info.Size = uint32(unsafe.Sizeof(info))
+	if ok, _, _ := getMonitorInfo.Call(mon, uintptr(unsafe.Pointer(&info))); ok == 0 {
+		return rect32{}, false
+	}
+	work := info.Work
+	if work == info.Monitor && autoHideTaskbar() {
+		work.Bottom--
+	}
+	return work, work.Right > work.Left && work.Bottom > work.Top
+}
+
+// resizeFrame is the per-side resize frame (SM_CXSIZEFRAME+SM_CXPADDEDBORDER)
+// at the window's own DPI; a maximized window overhangs its monitor by it.
+func resizeFrame(hwnd uintptr) (int32, int32) {
+	metric := func(index uintptr) int32 {
+		if getSystemMetricsForDpi.Find() == nil && getDpiForWindow.Find() == nil {
+			if dpi, _, _ := getDpiForWindow.Call(hwnd); dpi != 0 {
+				v, _, _ := getSystemMetricsForDpi.Call(index, dpi)
+				return int32(v)
+			}
+		}
+		v, _, _ := getSystemMetrics.Call(index)
+		return int32(v)
+	}
+	return metric(32) + metric(92), metric(33) + metric(92) // SM_CXSIZEFRAME/SM_CYSIZEFRAME + SM_CXPADDEDBORDER
+}
+
+func autoHideTaskbar() bool {
+	var data struct {
+		Size   uint32
+		Hwnd   uintptr
+		CB     uint32
+		Edge   uint32
+		Rect   rect32
+		LParam uintptr
+	}
+	data.Size = uint32(unsafe.Sizeof(data))
+	state, _, _ := shAppBarMessage.Call(4, uintptr(unsafe.Pointer(&data))) // ABM_GETSTATE
+	return state&1 != 0                                                    // ABS_AUTOHIDE
 }

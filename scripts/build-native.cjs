@@ -5,7 +5,7 @@ const root=path.resolve(__dirname,'..'),native=path.join(root,'native');
 const version=require('../package.json').version,artifactName=`SerialAssistant-${version}-win-x64.exe`;
 if(!/^\d+\.\d+\.\d+$/.test(version))throw new Error('package.json version must look like 1.2.3');
 execFileSync(process.execPath,['scripts/build.cjs'],{cwd:root,stdio:'inherit'});
-for(const name of ['index.html','app.css','app.js','OPPOSans-Regular.woff2','wallpaper.jpg'])fs.copyFileSync(path.join(root,'dist',name),path.join(native,'web',name));
+for(const name of ['index.html','app.css','app.js','OPPOSans-Regular.woff2'])fs.copyFileSync(path.join(root,'dist',name),path.join(native,'web',name));
 fs.copyFileSync(path.join(root,'THIRD_PARTY_NOTICES.md'),path.join(native,'web','THIRD_PARTY_NOTICES.txt'));
 fs.mkdirSync(path.join(root,'release'),{recursive:true});
 execFileSync('go',['run','github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.5.0','-64','-manifest','cmd/serial-assistant/app.manifest','-file-version',`${version}.0`,'-product-version',version,'-product-name','SerialAssistant','-description','串口助手','-original-name',artifactName,'-propagate-ver-strings','-o','cmd/serial-assistant/resource_windows_amd64.syso','versioninfo.json'],{cwd:native,stdio:'inherit'});

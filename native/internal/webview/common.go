@@ -26,6 +26,20 @@ const (
 type WebView interface {
 	BlockedNavigations() uint64
 
+	// BackgroundState is the put_DefaultBackgroundColor HRESULT and the
+	// colour read back as 0xAARRGGBB.
+	BackgroundState() (hr uint32, argb uint32)
+
+	// RefreshHost re-applies WebView2 bounds/visibility after a size change
+	// and returns the client rectangle used.
+	RefreshHost(visible bool) (left, top, right, bottom int32)
+	// SetHostVisible changes WebView2 visibility (put_IsVisible).
+	SetHostVisible(visible bool)
+	// ResizeHost puts the WebView2 bounds to the current client rectangle.
+	ResizeHost()
+	// NotifyHostMoved calls NotifyParentWindowPositionChanged.
+	NotifyHostMoved()
+
 	// Run runs the main loop until it's terminated. After this function exits -
 	// you must destroy the webview.
 	Run()
@@ -62,6 +76,10 @@ type WebView interface {
 	// SetHtml sets the webview HTML directly.
 	// The origin of the page is `about:blank`.
 	SetHtml(html string)
+
+	// SetHtmlChecked is SetHtml but reports a rejected navigation, e.g. a page
+	// over the NavigateToString size cap, instead of leaving a blank window.
+	SetHtmlChecked(html string) error
 
 	// Init injects JavaScript code at the initialization of the new page. Every
 	// time the webview will open a the new page - this initialization code will

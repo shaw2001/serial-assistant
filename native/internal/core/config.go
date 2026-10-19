@@ -41,6 +41,8 @@ type UIConfig struct {
 	RememberInput  bool `json:"rememberInput"`
 	AutoUpdate     bool `json:"autoUpdate"`
 	PrivacyVersion int  `json:"privacyVersion"`
+	// JLink remembers the last J-Link RTT settings for the next new session.
+	JLink *RTTOptions `json:"jlink,omitempty"`
 }
 type HistoryPayload struct {
 	Payload
@@ -77,6 +79,8 @@ type DeviceConfig struct {
 	Highlight      bool             `json:"highlight"`
 	OnlyMatches    bool             `json:"onlyMatches"`
 	Autoscroll     bool             `json:"autoscroll"`
+	Kind           string           `json:"kind,omitempty"`
+	RTT            *RTTOptions      `json:"rtt,omitempty"`
 }
 
 // Validate canonical JSON keys (including duplicates), then decode to typed data.
@@ -108,6 +112,14 @@ func DecodeConfig(data []byte) (Config, error) {
 			return c, errors.New("设备配置无效。")
 		}
 		ids[d.ID] = true
+		if !oneOf(d.Kind, "", "serial", "rtt") || (d.Kind == "rtt") != (d.RTT != nil) {
+			return c, errors.New("设备连接类型无效。")
+		}
+		if d.RTT != nil {
+			if e := d.RTT.Validate(); e != nil {
+				return c, errors.New("J-Link RTT 设置无效：" + e.Error())
+			}
+		}
 		if d.Params.Data < 5 || d.Params.Data > 8 || !oneOf(d.Params.Parity, "none", "even", "odd", "mark", "space") || !oneOf(d.Params.Flow, "none", "rtscts", "xonxoff") || (d.Params.Stop != 1 && d.Params.Stop != 1.5 && d.Params.Stop != 2) {
 			return c, errors.New("串口参数无效。")
 		}
@@ -147,6 +159,11 @@ func DecodeConfig(data []byte) (Config, error) {
 			if len(p.ID) > 128 || len(p.Name) > 320 || !validDraft(p.Payload) {
 				return c, errors.New("快捷指令无效。")
 			}
+		}
+	}
+	if c.UI.JLink != nil {
+		if e := c.UI.JLink.Validate(); e != nil {
+			return c, errors.New("J-Link RTT 默认设置无效：" + e.Error())
 		}
 	}
 	if c.ActiveID != "" && !ids[c.ActiveID] {

@@ -1,9 +1,11 @@
 export const fromBase64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 export const toHex=b=>Array.from(b,x=>x.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+// The log pane keeps up to LOG_ROW_CAP lines (and raw records to rebuild them).
+export const LOG_ROW_CAP=50000,LOG_BYTE_CAP=64*1024*1024;
 export class LogModel{
   constructor(encoding='utf-8',newline='auto'){this.encoding=encoding;this.newline=newline;this.records=[];this._rows=[];this._rowStart=0;this.recordBytes=0;this.rowBytes=0;this.trimmed=0;this.nextRow=0;this.breakStream();}
   get rows(){return this._rowStart?this._rows.slice(this._rowStart):this._rows;}
-  prune(){while(this._rows.length-this._rowStart>10000||this.rowBytes>16*1024*1024){const r=this._rows[this._rowStart++];this.rowBytes-=r.length;this.trimmed++;if(this.current===r)this.current=null;if(this.pendingCR===r)this.pendingCR=null;}if(this._rowStart>4096){this._rows=this._rows.slice(this._rowStart);this._rowStart=0;}}
+  prune(){while(this._rows.length-this._rowStart>LOG_ROW_CAP||this.rowBytes>LOG_BYTE_CAP){const r=this._rows[this._rowStart++];this.rowBytes-=r.length;this.trimmed++;if(this.current===r)this.current=null;if(this.pendingCR===r)this.pendingCR=null;}if(this._rowStart>4096){this._rows=this._rows.slice(this._rowStart);this._rowStart=0;}}
   decode(decoder,data,stream=false){return this.encoding==='ascii'?Array.from(data,b=>b<128?String.fromCharCode(b):'�').join(''):decoder.decode(data,{stream});}
   breakStream(){if(this.pendingCR&&this.newline==='crlf')this.pendingCR.text+='␍';if(this.decoder){const rest=this.decoder.decode();if(rest&&this.current)this.current.text+=rest;}this.decoder=new TextDecoder(this.encoding==='ascii'?'windows-1252':this.encoding);this.current=null;this.pendingCR=null;}
   clear(){this.records=[];this._rows=[];this._rowStart=0;this.recordBytes=0;this.rowBytes=0;this.breakStream();}
@@ -12,7 +14,7 @@ export class LogModel{
   setNewline(newline){if(!['auto','crlf','lf','cr','none','batch'].includes(newline)||newline===this.newline)return;this.newline=newline;this.rebuild();}
   row(record){const r={id:++this.nextRow,time:record.time,direction:record.direction,text:'',parts:[],length:0,sources:[],closed:false};this._rows.push(r);this.prune();return r;}
   part(row,data,seq){if(data.length){row.parts.push(data);row.length+=data.length;this.rowBytes+=data.length;}if(row.sources[row.sources.length-1]!==seq)row.sources.push(seq);this.prune();}
-  append(record){this.records.push(record);this.recordBytes+=record.length+256;while(this.records.length>10000||this.recordBytes>16*1024*1024){const r=this.records.shift();this.recordBytes-=r.length+256;}this.consume(record);}
+  append(record){this.records.push(record);this.recordBytes+=record.length+256;if(this.records.length>LOG_ROW_CAP*1.25||this.recordBytes>LOG_BYTE_CAP){let n=0,bytes=this.recordBytes;while(this.records.length-n>LOG_ROW_CAP||bytes>LOG_BYTE_CAP*0.9){bytes-=this.records[n].length+256;n++;}this.records=this.records.slice(n);this.recordBytes=bytes;}this.consume(record);}
   consume(record){
     if(record.direction==='SYS'){this.breakStream();const row=this.row(record);row.text=record.text||'';row.sources=[record.seq];return;}
     const data=fromBase64(record.dataBase64);

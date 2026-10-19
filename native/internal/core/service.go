@@ -22,9 +22,28 @@ type Options struct {
 	StopBits float64 `json:"stopBits"`
 	Flow     string  `json:"flow"`
 	Capture  bool    `json:"capture"`
+	// Kind is "" or "serial" for a serial port, "rtt" for a J-Link RTT session.
+	Kind string      `json:"kind,omitempty"`
+	RTT  *RTTOptions `json:"rtt,omitempty"`
 }
 
+var rttLabelPattern = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,80}$`)
+
+func (o Options) IsRTT() bool { return o.Kind == "rtt" }
+
 func (o Options) Validate() error {
+	if o.Kind != "" && !oneOf(o.Kind, "serial", "rtt") {
+		return errors.New("连接类型无效。")
+	}
+	if o.IsRTT() {
+		if o.RTT == nil {
+			return errors.New("缺少 J-Link RTT 设置。")
+		}
+		if !rttLabelPattern.MatchString(o.Path) {
+			return errors.New("J-Link RTT 会话名称无效。")
+		}
+		return o.RTT.Validate()
+	}
 	if len(o.Path) > 256 || strings.Contains(o.Path, "..") || !pathPattern.MatchString(o.Path) {
 		return errors.New("请输入有效的串口名称，如 COM5。")
 	}
@@ -73,6 +92,9 @@ type session struct {
 	generation                                uint64
 	records                                   []Record
 	cacheBytes                                int
+	history                                   []historyEntry
+	historyBytes                              int
+	historyTrimmed                            uint64
 	rx, tx, seq, errors, trimmed, viewDropped uint64
 	started                                   time.Time
 	journal                                   *Journal
@@ -80,6 +102,34 @@ type session struct {
 	periodic                                  *periodic
 	capture                                   bool
 }
+
+// The display cache (records) mirrors what the log pane can hold. The history
+// is separate: it keeps every record of the session, independent of the “落盘”
+// toggle and of 清屏, so 保存日志 always has the complete received data.
+const (
+	cacheMaxRecords = 50000
+	cacheMaxBytes   = 64 * 1024 * 1024
+)
+
+// historyMaxBytes bounds the full-session history (payload plus per-record
+// overhead). Beyond it the oldest records are dropped and counted; a session
+// that needs more can turn on 落盘, whose files are merged into the export.
+var historyMaxBytes = 256 * 1024 * 1024
+
+// historyEntry is a compact copy of a Record: raw bytes instead of base64.
+type historyEntry struct {
+	rec  Record // DataBase64 left empty
+	data []byte
+}
+
+func (h historyEntry) record() Record {
+	r := h.rec
+	r.DataBase64 = base64.StdEncoding.EncodeToString(h.data)
+	return r
+}
+
+func historyCost(data []byte, r Record) int { return len(data) + len(r.Text) + len(r.Time) + 160 }
+
 type Service struct {
 	mu         sync.Mutex
 	sessions   map[string]*session
@@ -122,7 +172,17 @@ func (s *Service) recordLocked(x *session, direction string, data []byte, text s
 	r := Record{Type: "record", Seq: x.seq, Time: now.Format(time.RFC3339Nano), TimezoneOffset: zone / 60, MonotonicMs: time.Since(x.started).Milliseconds(), Direction: direction, Length: len(data), DataBase64: base64.StdEncoding.EncodeToString(data), Text: text}
 	x.records = append(x.records, r)
 	x.cacheBytes += len(data) + len(text) + 256
-	for len(x.records) > 10000 || x.cacheBytes > 16*1024*1024 {
+	h := historyEntry{rec: r, data: append([]byte(nil), data...)}
+	h.rec.DataBase64 = ""
+	x.history = append(x.history, h)
+	x.historyBytes += historyCost(h.data, h.rec)
+	for len(x.history) > 1 && x.historyBytes > historyMaxBytes {
+		x.historyBytes -= historyCost(x.history[0].data, x.history[0].rec)
+		x.history[0] = historyEntry{}
+		x.history = x.history[1:]
+		x.historyTrimmed++
+	}
+	for len(x.records) > cacheMaxRecords || x.cacheBytes > cacheMaxBytes {
 		a := x.records[0]
 		x.records = x.records[1:]
 		x.cacheBytes -= a.Length + len(a.Text) + 256
@@ -160,7 +220,7 @@ func (s *Service) snapshotLocked(x *session) map[string]any {
 	if x.periodic != nil {
 		p = map[string]any{"interval": x.periodic.interval, "count": x.periodic.count, "skipped": x.periodic.skipped}
 	}
-	return map[string]any{"id": x.id, "path": x.options.Path, "baudRate": x.options.BaudRate, "config": x.options, "status": x.status, "rx": x.rx, "tx": x.tx, "errors": x.errors, "trimmed": x.trimmed, "viewDropped": x.viewDropped, "captureDropped": dropped, "capture": x.capture, "recorded": recorded, "logFiles": files, "periodic": p}
+	return map[string]any{"id": x.id, "path": x.options.Path, "baudRate": x.options.BaudRate, "config": x.options, "status": x.status, "rx": x.rx, "tx": x.tx, "errors": x.errors, "trimmed": x.trimmed, "viewDropped": x.viewDropped, "captureDropped": dropped, "capture": x.capture, "recorded": recorded, "logFiles": files, "periodic": p, "history": len(x.history), "historyTrimmed": x.historyTrimmed}
 }
 func (s *Service) Snapshot(id string) (any, error) {
 	x, e := s.get(id)
@@ -209,7 +269,14 @@ func (s *Service) Open(id string, o Options) (any, error) {
 		return nil, errors.New("串口正在使用。")
 	}
 	for _, a := range s.sessions {
-		if a != x && strings.EqualFold(a.options.Path, o.Path) && oneOf(a.status, "opening", "connected", "closing") {
+		if a == x || !oneOf(a.status, "opening", "connected", "closing") {
+			continue
+		}
+		if o.IsRTT() && a.options.IsRTT() && a.options.RTT.Serial == o.RTT.Serial {
+			s.mu.Unlock()
+			return nil, errors.New("该 J-Link 已在另一个 RTT 会话中使用。多个 J-Link 同时使用时请填写各自的序列号。")
+		}
+		if !o.IsRTT() && !a.options.IsRTT() && strings.EqualFold(a.options.Path, o.Path) {
 			s.mu.Unlock()
 			return nil, errors.New("串口已在另一个会话中打开。")
 		}
@@ -250,7 +317,16 @@ func (s *Service) Open(id string, o Options) (any, error) {
 	}
 	x.port = port
 	x.status = "connected"
-	s.recordLocked(x, "SYS", nil, fmt.Sprintf("已连接 %s · %d bps", o.Path, o.BaudRate))
+	if o.IsRTT() {
+		s.statusLocked(x, port)
+		if o.RTT.UsesLogger() {
+			s.recordLocked(x, "SYS", nil, "已连接 "+o.RTT.Summary()+"（JLinkRTTLogger 只读，RTT 日志与串口数据一样显示和保存）")
+		} else {
+			s.recordLocked(x, "SYS", nil, fmt.Sprintf("已连接 %s（可收发：发送写入 RTT 下行通道 %d）", o.RTT.Summary(), o.RTT.Channel))
+		}
+	} else {
+		s.recordLocked(x, "SYS", nil, fmt.Sprintf("已连接 %s · %d bps", o.Path, o.BaudRate))
+	}
 	result := s.snapshotLocked(x)
 	s.mu.Unlock()
 	go s.read(x, port, generation)
@@ -265,6 +341,7 @@ func (s *Service) read(x *session, p Port, generation uint64) {
 			s.mu.Unlock()
 			return
 		}
+		s.statusLocked(x, p)
 		if n > 0 {
 			s.recordLocked(x, "RX", buf[:n], "")
 		}
@@ -273,7 +350,11 @@ func (s *Service) read(x *session, p Port, generation uint64) {
 			x.status = "error"
 			x.generation++
 			x.errors++
-			s.recordLocked(x, "SYS", nil, "设备断开："+e.Error())
+			if x.options.IsRTT() {
+				s.recordLocked(x, "SYS", nil, "J-Link RTT 已断开："+e.Error())
+			} else {
+				s.recordLocked(x, "SYS", nil, "设备断开："+e.Error())
+			}
 			s.emitLocked(Event{Type: "warning", ID: x.id, Text: e.Error()})
 			s.mu.Unlock()
 			go func() {
@@ -298,6 +379,27 @@ func (s *Service) read(x *session, p Port, generation uint64) {
 		}
 	}
 }
+
+// statusPort is implemented by ports that report connection messages (the
+// J-Link RTT logger); they appear in the log as SYS lines.
+type statusPort interface{ TakeStatus() []string }
+
+func (s *Service) statusLocked(x *session, p Port) {
+	if sp, ok := p.(statusPort); ok {
+		for _, line := range sp.TakeStatus() {
+			s.recordLocked(x, "SYS", nil, line)
+		}
+	}
+}
+
+// OpenAny opens a serial port or a J-Link RTT session according to o.Kind.
+func OpenAny(o Options) (Port, error) {
+	if o.IsRTT() {
+		return OpenRTT(*o.RTT)
+	}
+	return OpenSerial(o)
+}
+
 func (s *Service) finishJournal(x *session) {
 	s.mu.Lock()
 	j := x.journal
@@ -337,7 +439,11 @@ func (s *Service) Close(id string) (any, error) {
 	x.send.Unlock()
 	s.mu.Lock()
 	x.status = "disconnected"
-	s.recordLocked(x, "SYS", nil, "串口已断开，周期发送已停止。")
+	if x.options.IsRTT() {
+		s.recordLocked(x, "SYS", nil, "J-Link RTT 已断开。")
+	} else {
+		s.recordLocked(x, "SYS", nil, "串口已断开，周期发送已停止。")
+	}
 	s.mu.Unlock()
 	s.finishJournal(x)
 	return s.Snapshot(id)
