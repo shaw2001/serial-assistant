@@ -4,18 +4,27 @@ const {JSDOM}=require('jsdom'),{build}=require('esbuild');
 const {defaults}=require('../src/main/config.cjs');
 const tick=(ms=300)=>new Promise(resolve=>setTimeout(resolve,ms));
 
-test('stylesheet is a single solid-white light theme: no dark palette, glass, blur or wallpaper',async()=>{
+test('stylesheet is one light MasterImageBuilder glass theme over an in-app backdrop; the log stays near-opaque',async()=>{
   const css=await fs.readFile('src/renderer/app.css','utf8'),code=css.replace(/\/\*[\s\S]*?\*\//g,'');
-  for(const bad of ['html.light','native-glass','wallpaper','backdrop-filter','filter:blur','prefers-color-scheme:dark','--g-blur'])assert(!code.includes(bad),'stylesheet still contains '+bad);
-  assert.match(code,/html,body\{background:#ffffff;/);
-  assert.match(code,/#sui2\{[^}]*background:#ffffff;/);
-  assert.match(code,/--bg:#ffffff;/);
+  // Light only, no desktop see-through, no wallpaper.
+  for(const bad of ['html.light','native-glass','wallpaper','prefers-color-scheme:dark','--g-blur'])assert(!code.includes(bad),'stylesheet still contains '+bad);
+  assert.match(code,/html,body\{background:#eef2fb;/,'page base matches the opaque native window colour');
   assert.match(code,/color-scheme:light/);
-  // Rounded styling stays on cards, pills and dialogs.
-  assert.match(code,/\.su-log-panel\{[^}]*border-radius:10px/);
+  assert.match(code,/--accent:#0a6cff;/);
+  // Backdrop.qml: gradient + colour blobs drawn inside the page.
+  assert.match(code,/linear-gradient\(160deg,#eef2fb 0%,#f6f0fb 55%,#eef8f6 100%\)/);
+  // LiquidGlass cards: frosted over the in-app backdrop, 24px radius.
+  assert.match(code,/--glass-blur:blur\(28px\) saturate\(1\.7\)/);
+  assert.match(code,/backdrop-filter:var\(--glass-blur\)/);
+  assert.match(code,/\.su-log-panel\{border-radius:24px/);
+  assert.match(code,/\.su-commands\{border-radius:24px/);
+  assert.match(code,/\.su-dialog\{[^}]*border-radius:24px/);
   assert.match(code,/\.su-tab-wrap\{[^}]*border-radius:999px/);
-  assert.match(code,/\.su-dialog\{[^}]*border-radius:14px/);
   assert.match(code,/\.su-btn\{[^}]*border-radius:999px/);
+  // The log is never see-through: near-opaque white, no blur on it.
+  const log=[...code.matchAll(/--logbg:rgba\(255,255,255,([0-9.]+)\)/g)].map(m=>Number(m[1]));
+  assert(log.length&&log.every(a=>a>=0.93),'log background alpha '+log);
+  assert(!/\.su-log-screen\{[^}]*backdrop-filter/.test(code),'log surface must not be frosted');
 });
 
 test('app renders white with no theme toggle, ignores a stored dark preference, and never asks for a wallpaper',async()=>{

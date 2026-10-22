@@ -29,7 +29,7 @@ import (
 )
 
 // version is injected at build time: -ldflags "-X main.version=1.2.3"
-var version = "0.3.3"
+var version = "0.4.0"
 
 const releaseRepo = "shaw2001/serial-assistant"
 
@@ -63,6 +63,10 @@ var endPaint = user32.NewProc("EndPaint")
 var fillRect = user32.NewProc("FillRect")
 var setClassLongPtr = user32.NewProc("SetClassLongPtrW")
 var getStockObject = gdi32.NewProc("GetStockObject")
+var createSolidBrush = gdi32.NewProc("CreateSolidBrush")
+
+// hostBrush is created once and lives for the whole process.
+var hostBrush uintptr
 var shell32 = windows.NewLazySystemDLL("shell32.dll")
 var shellExecute = shell32.NewProc("ShellExecuteW")
 var shAppBarMessage = shell32.NewProc("SHAppBarMessage")
@@ -128,12 +132,19 @@ func applyOpaqueFrame(hwnd uintptr, diag *diagLog) {
 	diag.Printf("opaque frame: corner=%#x darkmode=%#x caption=%#x backdropNone=%#x extendFrame%v=%#x", uint32(corner), uint32(dark), uint32(caption), uint32(backdrop), m, uint32(extend))
 }
 
-// paintHostWhite fills the host client with solid white, so nothing but the
-// white page background can ever show around or before WebView2.
+// paintHostWhite fills the host client with the opaque backdrop colour
+// (hostBrushColor, #eef2fb), so only the page's own background colour can ever
+// show around or before WebView2.
 func paintHostWhite(hwnd, hdc uintptr) {
 	var rect struct{ Left, Top, Right, Bottom int32 }
 	getClientRect.Call(hwnd, uintptr(unsafe.Pointer(&rect)))
-	brush, _, _ := getStockObject.Call(0) // WHITE_BRUSH
+	if hostBrush == 0 {
+		hostBrush, _, _ = createSolidBrush.Call(uintptr(hostBrushColor))
+	}
+	brush := hostBrush
+	if brush == 0 {
+		brush, _, _ = getStockObject.Call(0) // WHITE_BRUSH fallback
+	}
 	fillRect.Call(hdc, uintptr(unsafe.Pointer(&rect)), brush)
 }
 
@@ -287,7 +298,7 @@ func main() {
 		return
 	}
 	bridgeToken := hex.EncodeToString(key)
-	// Opaque white WebView2 background (AARRGGBB); the controller sets the
+	// Opaque #eef2fb WebView2 background (AARRGGBB); the controller sets the
 	// same colour through DefaultBackgroundColor.
 	_ = os.Setenv("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", webviewBackgroundEnv)
 	w := webview.NewWithOptions(webview.WebViewOptions{DataPath: filepath.Join(dir, "WebView2"), BrowserExecutableFolder: browserFolder, AutoFocus: true, WindowOptions: webview.WindowOptions{Hidden: true, Title: "串口助手 · v" + version, Width: 1440, Height: 900}})

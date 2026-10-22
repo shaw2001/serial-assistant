@@ -4,17 +4,17 @@
   /* OPPO Sans everywhere, logs included; system fonts only fill missing glyphs. */
   --ui:"OPPO Sans UI","Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Noto Sans",system-ui,sans-serif;
   --mono:"OPPO Sans UI","Cascadia Mono",Consolas,"Noto Sans Mono CJK SC","Microsoft YaHei Mono","DejaVu Sans Mono",monospace;
-  /* One theme only: solid white. */
-  --bg:#ffffff;--panel:#ffffff;--raise:#ffffff;
+  /* One light theme, MasterImageBuilder glass (Theme.qml tokens). */
+  --bg:#eef2fb;--panel:#ffffff;--raise:rgba(255,255,255,.58);
   --surface:#f6f7f9;--field:#ffffff;
   --line:#e6e9ef;--line2:#d9dee6;
-  --tx1:#1b1f2a;--tx2:#4a5366;--tx3:#6f788b;--tx4:#a1a9b8;--ts:#8c95a6;
+  --tx1:#11141d;--tx2:#4a5366;--tx3:#6f788b;--tx4:#a1a9b8;--ts:#8c95a6;
   --log:#1f242b;--logbg:#ffffff;--zebra:#fafbfc;
-  --accent:#2f6bff;--accentbg:rgba(47,107,255,.12);
+  --accent:#0a6cff;--accentbg:rgba(10,108,255,.14);
   --rx:#14935f;--tx:#2563eb;--sys:#8a93a0;
-  --ok:#0f8a4f;--okbg:rgba(15,138,79,.10);
+  --ok:#1f9d48;--okbg:rgba(31,157,72,.11);
   --warn:#a76200;--warnbg:rgba(214,140,0,.14);
-  --err:#c92a2a;--errbg:rgba(201,42,42,.10);
+  --err:#e0342a;--errbg:rgba(224,52,42,.11);
   --num:#7c3aed;--hexc:#9a5b00;
   --hit:rgba(255,196,0,.35);--hitcur:#ffb703;--hitcurtx:#1a1400;
   --danger:#d93036;
@@ -35,7 +35,7 @@ button,input,select,textarea,code,kbd,pre,samp{font-family:inherit}
 #sui2 .su-log-screen,#sui2 .su-log-screen *,#sui2 input,#sui2 textarea,#sui2 [contenteditable]{-webkit-user-select:text;user-select:text}
 #sui2 .su-log-screen,#sui2 .su-stats,#sui2 .su-search-count,#sui2 .su-command-content,#sui2 .su-params,#sui2 .su-tab b{font-variant-numeric:tabular-nums}
 html,body{height:100%;margin:0;overflow:hidden}
-html,body{background:#ffffff;color:var(--tx1)}
+html,body{background:#eef2fb;color:var(--tx1)}
 #sui2{
   --su-log-size:13px;
   --su-log-lh:calc(var(--su-log-size) + 5px);
@@ -43,7 +43,7 @@ html,body{background:#ffffff;color:var(--tx1)}
   font:12.5px/1.4 var(--ui);
   display:grid;grid-template-rows:36px minmax(0,1fr);
   overflow:hidden;position:relative;isolation:isolate;text-align:left;
-  background:#ffffff;
+  background:#eef2fb;
 }
 #sui2>*{position:relative;z-index:1;min-width:0}
 #sui2 *{box-sizing:border-box}
@@ -325,3 +325,153 @@ html,body{background:#ffffff;color:var(--tx1)}
 #sui2 .su-rtt-grid label{min-width:0}
 #sui2 .su-rtt-grid input,#sui2 .su-rtt-grid select{width:100%;min-width:0;box-sizing:border-box}
 #sui2 .su-rtt-grid .su-path-row input{width:auto;flex:1}
+
+/* ===================================================================
+   v0.4.0 · MasterImageBuilder glass (Theme.qml / LiquidGlass.qml / Backdrop.qml)
+   Glass is faked over an in-app backdrop, exactly like Backdrop.qml: the
+   window itself stays opaque (#eef2fb), so nothing shows the desktop.
+   The log keeps a near-opaque white surface for contrast.
+   =================================================================== */
+:root{
+  --glass-fill:linear-gradient(180deg,rgba(255,255,255,.56),rgba(255,255,255,.32) 46%,rgba(255,255,255,.26));
+  --glass-blur:blur(28px) saturate(1.7);
+  --glass-shadow:inset 0 1px 0 rgba(255,255,255,.95),inset 1px 0 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(13,20,51,.05),0 10px 32px -10px rgba(26,31,77,.22),0 2px 6px -2px rgba(26,31,77,.08);
+  --field-fill:rgba(255,255,255,.58);--field-hover:rgba(255,255,255,.80);
+  --stroke:rgba(13,20,51,.10);--stroke2:rgba(13,20,51,.18);--track:rgba(13,20,51,.08);
+  --tx2:rgba(20,26,41,.72);--tx3:rgba(20,26,41,.58);--tx4:rgba(20,26,41,.36);
+  --pill:rgba(255,255,255,.5);--pill-b:rgba(13,20,51,.10);--pill-h:rgba(255,255,255,.80);
+  --line:rgba(13,20,51,.08);--line2:rgba(13,20,51,.12);
+  --logbg:rgba(255,255,255,.95);--zebra:rgba(13,20,51,.022);--surface:transparent;
+}
+/* Backdrop.qml: soft gradient + five colour blobs + white rings. */
+#sui2{
+  grid-template-rows:62px minmax(0,1fr);
+  background:
+    radial-gradient(closest-side circle at 10% 16%,rgba(91,140,255,.72),rgba(91,140,255,0)) 0 0/100% 100% no-repeat,
+    radial-gradient(closest-side circle at 84% 10%,rgba(179,125,255,.66),rgba(179,125,255,0)) 0 0/100% 100% no-repeat,
+    radial-gradient(closest-side circle at 74% 88%,rgba(255,134,184,.64),rgba(255,134,184,0)) 0 0/100% 100% no-repeat,
+    radial-gradient(closest-side circle at 16% 90%,rgba(62,216,200,.6),rgba(62,216,200,0)) 0 0/100% 100% no-repeat,
+    radial-gradient(closest-side circle at 50% 52%,rgba(255,193,92,.42),rgba(255,193,92,0)) 0 0/100% 100% no-repeat,
+    linear-gradient(160deg,#eef2fb 0%,#f6f0fb 55%,#eef8f6 100%);
+}
+#sui2::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(circle at 30% 34%,transparent 0 calc(25vmax - 2px),rgba(255,255,255,.75) calc(25vmax - 1px) 25vmax,transparent calc(25vmax + 1px)),
+    radial-gradient(circle at 78% 62%,transparent 0 calc(17vmax - 2px),rgba(255,255,255,.75) calc(17vmax - 1px) 17vmax,transparent calc(17vmax + 1px)),
+    radial-gradient(circle at 56% 12%,transparent 0 calc(11vmax - 2px),rgba(255,255,255,.75) calc(11vmax - 1px) 11vmax,transparent calc(11vmax + 1px));}
+
+/* LiquidGlass: frosted body, tint, key-light rim (top-left bright, bottom-right soft). */
+#sui2 .su-header,#sui2 .su-log-panel,#sui2 .su-commands,#sui2 .su-stats,#sui2 .su-dialog,#sui2 .su-notice,#sui2 .su-display-pop{
+  background:var(--glass-fill);-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
+  border:0;box-shadow:var(--glass-shadow);}
+#sui2 .su-header::after,#sui2 .su-log-panel::after,#sui2 .su-commands::after,#sui2 .su-stats::after,#sui2 .su-dialog::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;z-index:3;
+  background:linear-gradient(135deg,rgba(255,255,255,.98),rgba(255,255,255,.35) 28%,rgba(13,20,51,.07) 55%,rgba(255,255,255,.55) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;}
+
+/* Top bar (Main.qml topbar: floating glass, radius 26, gradient logo tile). */
+#sui2 .su-header{height:50px;margin:10px 12px 2px;border-radius:24px;padding:0 0 0 10px;gap:8px}
+#sui2 .su-logo{width:32px;height:32px;border-radius:11px;background:linear-gradient(180deg,#4f8dff,#8b5cff);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 4px 12px -2px rgba(79,141,255,.55)}
+#sui2 .su-logo svg{width:17px;height:17px}
+#sui2 .su-brand{font-size:14.5px;gap:9px}
+#sui2 .su-wctl{align-self:center;height:34px;margin-right:8px;gap:2px}
+#sui2 .su-wctl button{width:34px;height:34px;border-radius:999px}
+#sui2 .su-wctl .su-close{border-top-right-radius:999px}
+#sui2 .su-wctl .su-close:hover{background:var(--err)}
+
+/* GlassSegmented: track + white lens thumb. Tabs use the same language. */
+#sui2 .su-tabs,#sui2 .su-seg{background:var(--track);border:1px solid var(--stroke);box-shadow:none}
+#sui2 .su-tabs{padding:3px;height:36px}
+#sui2 .su-tab-wrap,#sui2 .su-tab{height:28px}
+#sui2 .su-tab-wrap.active,#sui2 .su-seg button[aria-pressed="true"],#sui2 .su-kind-seg button[aria-pressed="true"]{
+  background:linear-gradient(180deg,#ffffff,rgba(255,255,255,.82));
+  box-shadow:inset 0 1px 0 #fff,0 0 0 .5px rgba(13,20,51,.12),0 3px 10px -3px rgba(26,31,77,.28);}
+#sui2 .su-seg{height:26px;padding:2px}
+#sui2 .su-seg button[aria-pressed="true"]{color:var(--tx1)}
+#sui2 .su-send-seg{height:30px}
+
+/* GlassButton / GlassField: translucent white pill + top highlight; focus = accent ring. */
+#sui2 .su-fld,#sui2 .su-btn,#sui2 .su-mini,#sui2 .su-period,#sui2 .su-search,#sui2 .su-rsearch,#sui2 .su-filt button,#sui2 .su-rh select{
+  background:linear-gradient(180deg,rgba(255,255,255,.82),rgba(255,255,255,.5));border:1px solid var(--stroke);box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
+#sui2 .su-fld,#sui2 .su-btn{height:32px}
+#sui2 .su-fld:hover,#sui2 .su-btn:hover:not(:disabled),#sui2 .su-mini:hover{background:var(--field-hover)}
+#sui2 .su-btn{transition:transform .14s cubic-bezier(.2,.8,.3,1),background-color .14s}
+#sui2 .su-btn:active:not(:disabled),#sui2 .su-icon:active{transform:scale(.965)}
+#sui2 .su-icon{width:32px;height:32px}
+#sui2 .su-icon-sm{width:26px;height:26px}
+#sui2 .su-icon:hover,#sui2 .su-prof:hover,#sui2 .su-command:hover,#sui2 .su-tab-wrap:hover{background:rgba(255,255,255,.62)}
+#sui2 .su-search:focus-within,#sui2 .su-rsearch:focus-within,#sui2 .su-inp:focus-within,#sui2 .su-fld:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accentbg),inset 0 1px 0 #fff}
+#sui2 :is(button,input,select,textarea):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#sui2 .su-filt button[aria-pressed="true"]{background:var(--accentbg);color:var(--accent);border-color:rgba(10,108,255,.35)}
+/* primary = accent fill with glass highlight */
+#sui2 .su-send-button,#sui2 .su-primary,#sui2 .su-connect:not(.su-danger):not(:disabled),#sui2 .su-dialog .su-primary,#sui2 .su-dialog-actions .su-primary,#sui2 .su-command-buttons .su-command-send{
+  border:1px solid #4d95ff;color:#fff;background:linear-gradient(180deg,#3d8bff 0%,#0a6cff 52%,#0a62e8 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 6px 16px -6px rgba(10,108,255,.7);text-shadow:none}
+#sui2 .su-btn.su-danger,#sui2 .su-connect.su-danger,#sui2 .su-dialog .su-danger{border:1px solid #ff6e66;background:linear-gradient(180deg,#ff6a61,#e0342a 60%,#cc2a21);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 6px 16px -6px rgba(224,52,42,.65)}
+#sui2 .su-send-button{height:32px;padding:0 16px}
+/* GlassSwitch-style check toggles */
+#sui2 .su-tg:has(input:checked) i,#sui2 .su-tg[aria-pressed="true"] i{background:var(--accent);box-shadow:inset 0 1px 0 rgba(255,255,255,.45)}
+
+/* Workspace: cards with 24px radius and generous gaps (Main.qml). */
+#sui2 .su-workspace{padding:8px 12px 12px;gap:10px;grid-template-columns:minmax(0,1fr) 232px}
+#sui2.su-rail-off .su-workspace{grid-template-columns:minmax(0,1fr) 44px}
+#sui2 .su-log-panel{border-radius:24px;grid-template-rows:42px minmax(0,1fr) 52px}
+#sui2.su-input-open .su-log-panel{grid-template-rows:42px minmax(0,1fr) 108px}
+#sui2 .su-lh{height:42px;padding:0 10px 0 12px;gap:6px}
+/* The log itself: near-opaque, crisp, high contrast. */
+#sui2 .su-log-screen{background:var(--logbg);margin:0 10px;border-radius:16px;color:#14181f;
+  box-shadow:inset 0 0 0 1px rgba(13,20,51,.09),inset 0 1px 3px rgba(13,20,51,.05),0 1px 0 rgba(255,255,255,.9)}
+#sui2 .su-send{height:52px;padding:0 10px;gap:8px}
+#sui2.su-input-open .su-send{height:108px;padding:8px 10px}
+#sui2 .su-inp{height:34px;border-radius:14px;background:rgba(255,255,255,.9);border:1px solid var(--stroke);box-shadow:inset 0 1px 2px rgba(13,20,51,.05)}
+#sui2 .su-target{height:30px;padding:0 11px;background:var(--accentbg);box-shadow:inset 0 0 0 1px rgba(10,108,255,.25)}
+#sui2 .su-mini,#sui2 .su-period,#sui2 .su-opt .su-mini{height:30px}
+#sui2 .su-lh .su-mini,#sui2 .su-search{height:28px}
+#sui2 .su-lh .su-seg{height:28px}
+
+#sui2 .su-rcol{grid-template-rows:minmax(0,1fr) 58px;gap:10px}
+#sui2 .su-commands{border-radius:24px}
+#sui2 .su-rh{height:44px;padding:0 8px 0 16px;font-size:13.5px;border-bottom:1px solid var(--line)}
+#sui2 .su-rsearch{height:30px;margin:10px 10px 6px}
+#sui2 .su-command{height:30px;border-radius:10px;margin:0 6px}
+#sui2 .su-command-name,#sui2 .su-command-content{line-height:30px}
+#sui2 .su-gh{padding:0 14px;color:var(--tx3)}
+#sui2 .su-rfoot{padding:8px 14px}
+#sui2 .su-stats{height:58px;border-radius:20px;padding:6px 16px}
+
+/* StatusBanner: tinted rounded banner with a round level icon. */
+#sui2 .su-baud-error,#sui2 .su-inline-error,#sui2 .su-pause-banner{
+  display:flex;align-items:center;gap:10px;border-radius:14px;padding:8px 12px;color:var(--tx1);
+  background:rgba(224,52,42,.11);border:1px solid rgba(224,52,42,.38);}
+#sui2 .su-baud-error{margin:0 12px}
+#sui2 .su-baud-error::before,#sui2 .su-inline-error::before{content:"!";flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--err);color:#fff;font:700 12px/1 var(--ui)}
+#sui2 .su-inline-error{bottom:58px;left:16px;right:16px}
+#sui2 .su-pause-banner{position:sticky;margin:8px;background:rgba(217,122,0,.12);border-color:rgba(217,122,0,.38);color:var(--tx1)}
+#sui2 .su-pause-banner button{border-color:rgba(217,122,0,.6);color:var(--warn)}
+
+/* Toast.qml: glass pill with level dot, slides down. */
+#sui2 .su-notice{top:72px;border-radius:999px;padding:11px 20px 11px 12px;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:var(--tx1);
+  background:linear-gradient(180deg,rgba(255,255,255,.86),rgba(255,255,255,.66));box-shadow:var(--glass-shadow),0 12px 30px -10px rgba(26,31,77,.3);animation:su-toast .26s cubic-bezier(.2,.8,.3,1)}
+#sui2 .su-notice::before{content:"i";flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:#fff;font:700 12px/1 var(--ui)}
+@keyframes su-toast{from{opacity:0;transform:translate(-50%,-12px)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* GlassDialog */
+#sui2 .su-overlay{background:rgba(26,31,77,.16);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#sui2 .su-dialog{position:relative;border-radius:24px;padding:20px 22px 22px;color:var(--tx1);
+  background:linear-gradient(180deg,rgba(255,255,255,.86),rgba(255,255,255,.72));box-shadow:var(--glass-shadow),0 24px 60px -16px rgba(26,31,77,.4)}
+#sui2 .su-dialog-heading h2{font-size:16px;font-weight:600}
+#sui2 .su-dialog input,#sui2 .su-dialog select,#sui2 .su-dialog textarea{border-radius:12px;border:1px solid var(--stroke);background:rgba(255,255,255,.78);padding:8px 10px}
+#sui2 .su-dialog input:focus,#sui2 .su-dialog select:focus,#sui2 .su-dialog textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accentbg)}
+#sui2 .su-dialog-heading button,#sui2 .su-dialog-actions button:not(.su-primary):not(.su-danger){height:32px;border-radius:999px;border:1px solid var(--stroke);background:linear-gradient(180deg,rgba(255,255,255,.9),rgba(255,255,255,.6));box-shadow:inset 0 1px 0 #fff}
+#sui2 .su-dialog-actions button{height:34px;padding:0 16px}
+#sui2 .su-display-pop{border-radius:18px;top:34px;background:linear-gradient(180deg,rgba(255,255,255,.9),rgba(255,255,255,.76))}
+
+/* GlassScrollBar */
+#sui2 ::-webkit-scrollbar{width:10px;height:10px}
+#sui2 ::-webkit-scrollbar-track{background:transparent}
+#sui2 ::-webkit-scrollbar-thumb{border-radius:999px;border:3px solid transparent;background:rgba(13,20,51,.22) padding-box}
+#sui2 ::-webkit-scrollbar-thumb:hover{background:rgba(13,20,51,.36) padding-box}
+#sui2 ::-webkit-scrollbar-corner{background:transparent}
+
+@media (max-width:1366px){#sui2 .su-workspace{grid-template-columns:minmax(0,1fr) 208px}}
+@media (prefers-reduced-motion:reduce){#sui2 .su-notice{animation:none}#sui2 .su-btn,#sui2 .su-icon{transition:none}}
