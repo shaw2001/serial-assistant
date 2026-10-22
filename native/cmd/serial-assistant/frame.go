@@ -5,16 +5,18 @@ import (
 	"time"
 )
 
-// The window is a plain opaque white surface: no DWM Acrylic/Mica backdrop,
-// no blur-behind, no transparent WebView2 background.
+// The window is an opaque surface painted with the page backdrop colour
+// (#eef2fb, the top of the in-app glass backdrop): no DWM Acrylic/Mica, no
+// blur-behind, no transparent WebView2 background. The v0.4.0 glass look is
+// drawn inside the page over its own backdrop, never over the desktop.
 const (
 	// webviewBackgroundEnv is WEBVIEW2_DEFAULT_BACKGROUND_COLOR (AARRGGBB hex).
-	webviewBackgroundEnv = "FFFFFFFF"
+	webviewBackgroundEnv = "FFEEF2FB"
 	// webviewBackgroundARGB is the controller's DefaultBackgroundColor.
-	webviewBackgroundARGB uint32 = 0xFFFFFFFF
+	webviewBackgroundARGB uint32 = 0xFFEEF2FB
 	// hostBrushColor is the GDI COLORREF (0x00BBGGRR) used to paint the host
 	// window before and behind WebView2.
-	hostBrushColor uint32 = 0x00FFFFFF
+	hostBrushColor uint32 = 0x00FBF2EE
 )
 
 // opaqueFrameMargins are the DWM frame margins (left, right, top, bottom) for

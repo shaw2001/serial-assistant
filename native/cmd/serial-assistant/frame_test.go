@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-func TestWindowIsOpaqueWhite(t *testing.T) {
-	if webviewBackgroundEnv != "FFFFFFFF" || webviewBackgroundARGB != 0xFFFFFFFF || hostBrushColor != 0x00FFFFFF {
-		t.Fatal("window and WebView2 background must be opaque white")
+func TestWindowIsOpaqueBackdropColour(t *testing.T) {
+	if webviewBackgroundEnv != "FFEEF2FB" || webviewBackgroundARGB != 0xFFEEF2FB || hostBrushColor != 0x00FBF2EE {
+		t.Fatal("window and WebView2 background must be the opaque backdrop colour #eef2fb")
 	}
 	if !backgroundIsOpaque(webviewBackgroundARGB) || backgroundIsOpaque(0) || backgroundIsOpaque(0x80FFFFFF) {
 		t.Fatal("only alpha 0xFF counts as opaque")
