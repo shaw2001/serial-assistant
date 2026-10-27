@@ -26,8 +26,13 @@ test('log pane renders the newest 5,000 lines and loads older ones (up to 50,000
   try{
     const lines=Array.from({length:7000},(_,i)=>'line '+(i+1)+'\n').join('');
     batch({events:[{id,type:'record',record:rec(1,lines)}],states:[]});await tick(400);
+    // Following the tail (自动滚动 on) keeps only the newest 400 rows in the DOM (60 fps pass).
+    assert.equal(el('logs').querySelectorAll('.su-log-row').length,400,'tail window while following');
+    assert.match(el('records').textContent,/^400 条显示 \/ 700\d 条缓存$/);
+    // Ctrl+A expands to the full page (newest 5,000) before selecting.
+    w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'a',ctrlKey:true,bubbles:true,cancelable:true}));await tick(50);
     const rendered=el('logs').querySelectorAll('.su-log-row').length;
-    assert.equal(rendered,5000,'newest 5,000 lines render at once');
+    assert.equal(rendered,5000,'newest 5,000 lines available for selection');
     assert.match(el('records').textContent,/^5000 条显示 \/ 700\d 条缓存$/);
     assert.match(el('logs').lastElementChild.textContent,/line 7000/);
     // Scroll to the top with auto-scroll off: older lines load.

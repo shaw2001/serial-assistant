@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
-<title>串口助手 v0.4.1</title>
+<title>串口助手 v0.4.2</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -105,6 +105,7 @@
     <div class="su-log-screen" data-el="screen" role="region" aria-label="日志内容，时间为电脑记录时间">
       <div class="su-pause-banner" data-el="pause-banner" hidden><span data-el="pause-text">显示已暂停，接收与会话记录继续。</span><button data-action="pause" type="button">恢复显示</button></div>
       <div data-el="logs"></div>
+      <button class="su-new-data" data-el="new-data" data-action="jump-latest" type="button" hidden title="跳到最新数据">有 0 条新数据 ↓</button>
     </div>
     <div class="su-send" aria-label="发送数据">
       <div class="su-target" data-el="send-target" title="发送目标">未选择</div>
@@ -159,7 +160,7 @@
       <div class="su-stat-row"><span class="su-recd"><i></i>落盘中</span><span data-el="rate">0 B/s</span><span data-el="uptime">00:00:00</span></div>
       <span class="su-status-dot" data-el="status-dot" hidden></span>
       <span class="su-sr" data-el="status">未连接</span>
-      <span class="su-sr" data-el="version">v0.4.1</span>
+      <span class="su-sr" data-el="version">v0.4.2</span>
       <span class="su-sr" data-el="records">0 条显示</span>
       <span class="su-sr" data-el="session-info">本地运行 · 就绪</span>
       <span class="su-sr" data-el="health"></span>
