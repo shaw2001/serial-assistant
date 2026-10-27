@@ -7,7 +7,7 @@ export class LogModel{
   get rows(){return this._rowStart?this._rows.slice(this._rowStart):this._rows;}
   prune(){while(this._rows.length-this._rowStart>LOG_ROW_CAP||this.rowBytes>LOG_BYTE_CAP){const r=this._rows[this._rowStart++];this.rowBytes-=r.length;this.trimmed++;if(this.current===r)this.current=null;if(this.pendingCR===r)this.pendingCR=null;}if(this._rowStart>4096){this._rows=this._rows.slice(this._rowStart);this._rowStart=0;}}
   decode(decoder,data,stream=false){return this.encoding==='ascii'?Array.from(data,b=>b<128?String.fromCharCode(b):'�').join(''):decoder.decode(data,{stream});}
-  breakStream(){if(this.pendingCR&&this.newline==='crlf')this.pendingCR.text+='␍';if(this.decoder){const rest=this.decoder.decode();if(rest&&this.current)this.current.text+=rest;}this.decoder=new TextDecoder(this.encoding==='ascii'?'windows-1252':this.encoding);this.current=null;this.pendingCR=null;}
+  breakStream(){if(this.pendingCR&&this.newline==='crlf')this.pendingCR.text+='␍';if(this.decoder){const rest=this.decoder.decode();if(rest&&this.current)this.current.text+=rest;}this.decoder=new TextDecoder(this.encoding==='ascii'?'windows-1252':this.encoding);this.current=null;this.pendingCR=null;this.pendingAuto=null;}
   clear(){this.records=[];this._rows=[];this._rowStart=0;this.recordBytes=0;this.rowBytes=0;this.breakStream();}
   rebuild(){const records=this.records.slice();this._rows=[];this._rowStart=0;this.rowBytes=0;this.breakStream();for(const r of records)this.consume(r);}
   setEncoding(encoding){if(encoding===this.encoding)return;this.encoding=encoding;this.rebuild();}
@@ -26,18 +26,40 @@ export class LogModel{
       return;
     }
     let at=0;
+    if(this.pendingAuto)at=this.resumeAuto(data,record);
     if(this.pendingCR){if(data[0]===10&&(this.newline==='auto'||this.newline==='crlf')){feed(this.pendingCR,data.subarray(0,1));this.pendingCR.text=this.pendingCR.text.replace(/\n$/,'');this.pendingCR.closed=true;this.current=null;at=1;}else if(this.newline==='crlf')this.pendingCR.text+='␍';this.pendingCR=null;}
     while(at<data.length){
       if(!this.current)this.current=this.row(record);
       const row=this.current,limit=Math.min(data.length,at+8192-row.length);let end=at;while(end<limit&&data[end]!==10&&data[end]!==13)end++;
       if(end>at){feed(row,data.subarray(at,end));at=end;}
       if(at<limit){const b=data[at++];this.part(row,data.subarray(at-1,at),record.seq);this.decoder.decode(data.subarray(at-1,at),{stream:true});
-        if(this.newline==='auto'||(this.newline==='lf'&&b===10)||(this.newline==='cr'&&b===13)){row.closed=true;this.current=null;if(this.newline==='auto'&&b===13){if(at<data.length&&data[at]===10){this.part(row,data.subarray(at,at+1),record.seq);this.decoder.decode(data.subarray(at,at+1),{stream:true});at++;}else this.pendingCR=row;}}
+        if(this.newline==='auto'||(this.newline==='lf'&&b===10)||(this.newline==='cr'&&b===13)){row.closed=true;this.current=null;if(this.newline==='auto')at=this.autoTail(row,data,at,record,b);}
         else if(this.newline==='crlf'&&b===13){if(at<data.length&&data[at]===10){this.part(row,data.subarray(at,at+1),record.seq);this.decoder.decode(data.subarray(at,at+1),{stream:true});at++;row.closed=true;this.current=null;}else if(at===data.length)this.pendingCR=row;else row.text+='␍';}
         else row.text+=b===13?'␍':'␊';
       }
       if(row.length>=8192)this.current=null;
     }
   }
+  // Auto newline: one line ends at CRLF, CR, LF, and also at the two-byte
+  // oddities CR CR LF (a "\r\n" sent through a tty that maps LF to CRLF) and
+  // LF CR (some firmware prints "\n\r"). Counting those as two breaks used to
+  // put a blank row between every line. Real empty lines (LF LF, CRLF CRLF)
+  // still show as empty rows. Works across chunk boundaries via pendingAuto.
+  eat(row,data,at,record){this.part(row,data.subarray(at,at+1),record.seq);this.decoder.decode(data.subarray(at,at+1),{stream:true});return at+1;}
+  autoTail(row,data,at,record,b){
+    if(at>=data.length){this.pendingAuto={row,k:b===13?'r':'n'};return at;}
+    if(b===13){
+      if(data[at]===10)return this.eat(row,data,at,record);
+      if(data[at]===13){if(at+1>=data.length){this.pendingAuto={row,k:'rr'};return this.eat(row,data,at,record);}if(data[at+1]===10)return this.eat(row,data,this.eat(row,data,at,record),record);}
+      return at;
+    }
+    if(data[at]===13&&data[at+1]!==10)return this.eat(row,data,at,record);
+    return at;
+  }
+  resumeAuto(data,record){const {row,k}=this.pendingAuto;this.pendingAuto=null;let at=0;
+    if(k==='r'){if(data[0]===10)return this.eat(row,data,0,record);if(data[0]===13){if(data.length===1){this.pendingAuto={row,k:'rr'};return this.eat(row,data,0,record);}if(data[1]===10)return this.eat(row,data,this.eat(row,data,0,record),record);}return 0;}
+    if(k==='rr'){if(data[0]===10)return this.eat(row,data,0,record);const empty=this.row(record);empty.closed=true;return 0;}
+    if(data[0]===13&&data[1]!==10)at=this.eat(row,data,0,record);
+    return at;}
   prefix(row,max=512){const result=new Uint8Array(Math.min(row.length,max));let at=0;for(const part of row.parts){const n=Math.min(part.length,result.length-at);result.set(part.subarray(0,n),at);at+=n;if(at===result.length)break;}return result;}
 }

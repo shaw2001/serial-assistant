@@ -65,3 +65,39 @@ func TestBuiltAssetsFitWebView2Budget(t *testing.T) {
 		t.Fatalf("page uses %d of %d URL characters; leave headroom", n, maxDocumentURIChars)
 	}
 }
+
+// The page runs from a data: URL (NavigateToString) with img-src data: only,
+// so a relative asset such as <img src="logo.svg"> can never load in WebView2
+// (it showed an empty box in 0.4.1). Every src/href must be inline.
+func TestComposedPageHasNoRelativeAssetsAndInlinesLogo(t *testing.T) {
+	dist := filepath.Join("..", "..", "..", "dist")
+	read := func(name string) []byte {
+		b, err := os.ReadFile(filepath.Join(dist, name))
+		if err != nil {
+			t.Skip("dist not built: " + err.Error())
+		}
+		return b
+	}
+	p := documentParts{HTML: read("index.html"), CSS: read("app.css"), JS: read("app.js"), Font: read("OPPOSans-Regular.woff2"), Bridge: []byte("b"), Nonce: strings.Repeat("0", 32), BridgeToken: strings.Repeat("0", 64)}
+	html, err := composeDocument(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := html[:strings.Index(html, "<script nonce=")]
+	for _, attr := range []string{` src="`, ` href="`} {
+		for rest := body; ; {
+			i := strings.Index(rest, attr)
+			if i < 0 {
+				break
+			}
+			rest = rest[i+len(attr):]
+			if v := rest[:strings.Index(rest, `"`)]; !strings.HasPrefix(v, "data:") && !strings.HasPrefix(v, "#") {
+				t.Fatalf("page references %q, which cannot load from a NavigateToString data: page", v)
+			}
+		}
+	}
+	i := strings.Index(body, `<img class="su-logo"`)
+	if i < 0 || !strings.Contains(body[i:i+200], `src="data:image/png;base64,`) {
+		t.Fatal("title-bar logo must be the app icon as an inline data: PNG")
+	}
+}

@@ -1,0 +1,143 @@
+{
+  "格式": "串口助手快捷指令",
+  "version": 1,
+  "说明": "groups 为分组列表；hex=true 表示按十六进制发送；newline 可选 none/cr/lf/crlf；encoding 可选 utf-8/gbk/ascii；description 可留空。",
+  "groups": [
+    {
+      "name": "RT-Thread",
+      "commands": [
+        {
+          "name": "线程列表",
+          "command": "ps",
+          "hex": false,
+          "newline": "crlf",
+          "encoding": "utf-8",
+          "description": "列出 RT-Thread 线程"
+        },
+        {
+          "name": "定时器列表",
+          "command": "list_timer",
+          "hex": false,
+          "newline": "crlf",
+          "encoding": "utf-8"
+        },
+        {
+          "name": "低功耗状态",
+          "command": "pm_dump",
+          "hex": false,
+          "newline": "crlf",
+          "encoding": "utf-8"
+        },
+        {
+          "name": "系统信息",
+          "command": "sysinfo",
+          "hex": false,
+          "newline": "crlf",
+          "encoding": "utf-8"
+        },
+        {
+          "name": "CPU 使用率",
+          "command": "cpu",
+          "hex": false,
+          "newline": "crlf",
+          "encoding": "utf-8"
+        }
+      ]
+    },
+    {
+      "name": "AT 指令",
+      "commands": [
+        {
+          "name": "连通测试",
+          "command": "AT",
+          "hex": false,
+          "newline": "crlf",
+          "encoding": "utf-8",
+          "description": "模组应答 OK"
+        },
+        {
+          "name": "设备信息",
+          "command": "ATI",
+          "hex": false,
+          "newline": "crlf",
+          "encoding": "utf-8"
+        },
+        {
+          "name": "信号强度",
+          "command": "AT+CSQ",
+          "hex": false,
+          "newline": "crlf",
+          "encoding": "utf-8"
+        },
+        {
+          "name": "注册状态",
+          "command": "AT+CREG?",
+          "hex": false,
+          "newline": "crlf",
+          "encoding": "utf-8"
+        },
+        {
+          "name": "查询卡号",
+          "command": "AT+CCID",
+          "hex": false,
+          "newline": "crlf",
+          "encoding": "utf-8"
+        }
+      ]
+    },
+    {
+      "name": "Modbus",
+      "commands": [
+        {
+          "name": "读取寄存器",
+          "command": "01 03 00 00 00 02 C4 0B",
+          "hex": true,
+          "newline": "none",
+          "encoding": "utf-8",
+          "description": "Modbus RTU：从站 1 读 2 个保持寄存器"
+        }
+      ]
+    },
+    {
+      "name": "常用",
+      "commands": [
+        {
+          "name": "重启",
+          "command": "reboot",
+          "hex": false,
+          "newline": "lf",
+          "encoding": "utf-8"
+        }
+      ]
+    },
+    {
+      "name": "电源管理",
+      "commands": [
+        {
+          "name": "关机",
+          "command": "poweroff",
+          "hex": false,
+          "newline": "crlf",
+          "encoding": "utf-8",
+          "description": "自定义分组示例：分组不存在时自动新建"
+        },
+        {
+          "name": "GBK 中文指令",
+          "command": "显示 你好",
+          "hex": false,
+          "newline": "crlf",
+          "encoding": "gbk",
+          "description": "encoding=gbk 时按 GBK 字节发送"
+        },
+        {
+          "name": "无结尾符",
+          "command": "status",
+          "hex": false,
+          "newline": "none",
+          "encoding": "utf-8",
+          "description": "newline=none：不追加换行"
+        }
+      ]
+    }
+  ]
+}

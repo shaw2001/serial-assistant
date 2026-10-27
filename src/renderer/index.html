@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
-<title>串口助手 v0.4.0</title>
+<title>串口助手 v0.4.1</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
 <div id="sui2">
 <header class="su-header">
   <div class="su-brand" title="串口助手">
-    <span class="su-logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h3l3-7 4 14 3-7h5"/></svg></span>
+    <img class="su-logo" alt="" aria-hidden="true" width="30" height="30" src="data:image/png;base64,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">
     <span class="su-brand-name">串口助手</span>
   </div>
   <div class="su-tabs" data-el="tabs" role="tablist" aria-label="多串口会话"></div>
@@ -25,7 +25,6 @@
       <span class="su-port-meta hide-md" data-el="port-meta"></span>
     </label>
     <button class="su-icon su-serial-only" data-action="refresh" title="刷新端口" type="button" aria-label="刷新串口列表"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
-    <button class="su-icon su-serial-only" data-action="manual-port" title="手动输入串口" type="button" aria-label="手动输入串口"><svg viewBox="0 0 24 24"><path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-3L16.5 4.5a2 2 0 0 0-3 0L3 15v5z"/></svg></button>
     <label class="su-fld su-serial-only" title="波特率">
       <span class="su-sr">波特率</span>
       <select data-el="baud" title="波特率"><option>110</option><option>300</option><option>600</option><option>1200</option><option>2400</option><option>4800</option><option>9600</option><option>14400</option><option>19200</option><option>28800</option><option>38400</option><option>57600</option><option>76800</option><option selected>115200</option><option>128000</option><option>230400</option><option>256000</option><option>460800</option><option>500000</option><option>576000</option><option>921600</option><option>1000000</option><option>1500000</option><option>2000000</option><option>3000000</option><option value="custom">自定义…</option></select>
@@ -42,12 +41,9 @@
   <span class="su-sp"></span>
   <div class="su-toptools">
     <button class="su-prof" data-action="profile" type="button" title="配置方案"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="su-prof-label hide-md">配置方案</span></button>
-    <label class="su-icon su-pin" title="窗口置顶">
-      <input data-el="always-top" type="checkbox">
-      <svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 4 3H6l4-3zM12 13v7"/></svg>
-      <span class="su-sr">窗口置顶</span>
-    </label>
-    <button class="su-icon" data-action="help" type="button" title="使用说明" aria-label="使用说明"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg></button>
+    <div class="su-more">
+      <button class="su-icon" data-action="more" data-el="more" type="button" title="更多" aria-label="更多" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg></button>
+    </div>
   </div>
   <div class="su-wctl">
     <button type="button" data-action="win-min" title="最小化" aria-label="最小化"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
@@ -88,6 +84,7 @@
         <button aria-label="下一条匹配" class="su-nav" data-action="next" type="button"><svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg></button>
       </label>
       <span class="su-lsep" aria-hidden="true"></span>
+      <button class="su-tg su-log-theme" data-action="log-theme" data-el="log-theme" type="button" title="日志：浅色（点击切换为深色）" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg><span>浅色</span></button>
       <span class="su-display-box">
         <button class="su-icon su-icon-sm" data-action="toggle-display" title="显示选项" type="button" aria-label="显示选项"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg></button>
         <div class="su-display-pop" data-el="display-pop" hidden>
@@ -97,6 +94,7 @@
           <label class="su-check"><input data-el="show-meta" type="checkbox"><span>时间 / 方向</span></label>
           <label class="su-check"><input data-el="only-matches" type="checkbox"><span>只看匹配</span></label>
           <label class="su-check"><input checked data-el="highlight" type="checkbox"><span>高亮关键字</span></label>
+          <div class="su-level-box"><span class="su-level-title">日志等级颜色</span><div class="su-level-colors" data-el="level-colors"></div></div>
           <p class="su-display-hint">等宽文本 · 保留设备原始字节。缓存行数、日志文件与版本号在使用说明中。</p>
         </div>
       </span>
@@ -116,7 +114,7 @@
         <select class="su-sr" data-el="send-mode" aria-label="发送格式"><option value="text">文本</option><option value="hex">HEX</option></select>
       </div>
       <div class="su-inp">
-        <span class="su-sr" data-el="keyboard-hint">Enter 发送 · Shift+Enter 换行 · Tab 补全</span>
+        <span class="su-sr" data-el="keyboard-hint">Enter 发送 · Shift+Enter 换行</span>
         <span class="su-sr" data-el="preview-label">最终字节</span>
         <textarea data-el="input" placeholder="输入指令，Enter 发送" rows="1" spellcheck="false"></textarea>
         <code class="su-preview hide-md" data-el="preview">等待输入</code>
@@ -140,11 +138,6 @@
       <span class="su-sr" data-el="periodic-note" hidden></span>
       <button class="su-btn su-send-button" data-action="send" data-el="send" disabled type="button">发送</button>
     </div>
-    <div class="su-completion" data-el="completion" hidden>
-      <button type="button" data-el="recover-input" data-action="recover-input" hidden>确认设备输入状态</button>
-      <span data-el="completion-status"></span>
-      <div data-el="completion-candidates"></div>
-    </div>
     <div class="su-inline-error" data-el="input-error" hidden role="alert"></div>
   </section>
   <div class="su-rcol">
@@ -153,6 +146,7 @@
         <span class="su-sp"></span>
         <label class="su-sr" for="su-command-group">指令分组</label>
         <select id="su-command-group" data-el="command-group" title="按分组筛选；选中的分组也是新增指令的分组"><option value="all">全部</option><option value="rtt">RT-Thread</option><option value="at">AT 指令</option><option value="binary">Modbus</option><option value="custom">常用</option></select>
+        <button class="su-icon su-icon-sm" data-action="commands-io" title="批量导入 / 导出快捷指令" type="button" aria-label="批量导入 / 导出快捷指令"><svg viewBox="0 0 24 24"><path d="M12 3v11M8 10l4 4 4-4M5 15v4h14v-4"/></svg></button>
         <button class="su-icon su-icon-sm" data-action="add-command" title="新增指令" type="button" aria-label="新增指令"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
         <button class="su-icon su-icon-sm" data-action="toggle-rail" title="收起侧栏" type="button" aria-label="收起侧栏"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
       </div>
@@ -161,11 +155,11 @@
       <div class="su-rfoot" data-el="command-hint">指令仅发送到当前串口。</div>
     </aside>
     <footer class="su-demo-footer su-stats" data-el="status-card" title="版本、缓存行数、日志目录和检查更新在使用说明中">
-      <div class="su-stat-row"><span>RX <b class="su-rxc" data-el="rx">0 B</b></span><span>TX <b class="su-txc" data-el="tx">0 B</b></span></div>
+      <div class="su-stat-row"><span>RX <b class="su-rxc" data-el="rx">0 B</b></span><span>TX <b class="su-txc" data-el="tx">0 B</b></span><span class="su-overflow" data-el="overflow" hidden></span></div>
       <div class="su-stat-row"><span class="su-recd"><i></i>落盘中</span><span data-el="rate">0 B/s</span><span data-el="uptime">00:00:00</span></div>
       <span class="su-status-dot" data-el="status-dot" hidden></span>
       <span class="su-sr" data-el="status">未连接</span>
-      <span class="su-sr" data-el="version">v0.4.0</span>
+      <span class="su-sr" data-el="version">v0.4.1</span>
       <span class="su-sr" data-el="records">0 条显示</span>
       <span class="su-sr" data-el="session-info">本地运行 · 就绪</span>
       <span class="su-sr" data-el="health"></span>
@@ -175,7 +169,16 @@
   </div>
 </main>
 <div aria-live="polite" class="su-notice" data-el="notice" hidden role="status"></div>
-<div class="su-overlay" data-el="overlay" hidden><section aria-labelledby="su2-dialog-title" aria-modal="true" class="su-dialog" role="dialog"><header class="su-dialog-heading"><h2 data-el="dialog-title" id="su2-dialog-title"></h2><button aria-label="关闭对话框" data-action="close-dialog" type="button">关闭</button></header><div class="su-dialog-body" data-el="dialog-body"></div></section></div>
+<div class="su-more-pop" data-el="more-pop" hidden>
+    <button class="su-more-item su-serial-only" data-action="manual-port" title="手动输入串口" type="button" aria-label="手动输入串口"><svg viewBox="0 0 24 24"><path d="M4 20h4l10.5-10.5a2 2 0 0 0 0-3L16.5 4.5a2 2 0 0 0-3 0L3 15v5z"/></svg><span>手动输入串口</span></button>
+    <label class="su-more-item su-pin" title="窗口置顶">
+      <input data-el="always-top" type="checkbox">
+      <svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 4 3H6l4-3zM12 13v7"/></svg>
+      <span>窗口置顶</span>
+    </label>
+    <button class="su-more-item" data-action="help" type="button" title="使用说明" aria-label="使用说明"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg><span>使用说明</span></button>
+      </div>
+  <div class="su-overlay" data-el="overlay" hidden><section aria-labelledby="su2-dialog-title" aria-modal="true" class="su-dialog" role="dialog"><header class="su-dialog-heading"><h2 data-el="dialog-title" id="su2-dialog-title"></h2><button aria-label="关闭对话框" data-action="close-dialog" type="button">关闭</button></header><div class="su-dialog-body" data-el="dialog-body"></div></section></div>
 </div>
 <script src="app.js"></script>
 </body>

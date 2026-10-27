@@ -12,10 +12,50 @@ import (
 )
 
 type windowsPort struct {
-	h      windows.Handle
-	mu     sync.Mutex
-	closed bool
-	ops    sync.WaitGroup
+	h       windows.Handle
+	mu      sync.Mutex
+	closed  bool
+	ops     sync.WaitGroup
+	rxQueue uint32
+	txQueue uint32
+}
+
+// Requested driver queues. Drivers may round or ignore them; the accepted
+// values come from GetCommProperties (0 = driver does not report).
+const (
+	serialInQueue  = 1 << 20
+	serialOutQueue = 64 << 10
+)
+
+var procGetCommProperties = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetCommProperties")
+
+type commProp struct {
+	PacketLength, PacketVersion                             uint16
+	ServiceMask, Reserved1, MaxTxQueue, MaxRxQueue, MaxBaud uint32
+	ProvSubType, ProvCapabilities, SettableParams           uint32
+	SettableBaud                                            uint32
+	SettableData, SettableStopParity                        uint16
+	CurrentTxQueue, CurrentRxQueue, ProvSpec1, ProvSpec2    uint32
+	ProvChar                                                [1]uint16
+}
+
+// QueueSizes reports the accepted driver receive/transmit queue sizes.
+func (p *windowsPort) QueueSizes() (uint32, uint32) { return p.rxQueue, p.txQueue }
+
+// CommStatus clears and returns the CE_* line errors and the bytes waiting in
+// the driver receive queue.
+func (p *windowsPort) CommStatus() (uint32, uint32, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return 0, 0, errors.New("串口已关闭。")
+	}
+	var errs uint32
+	var st windows.ComStat
+	if e := windows.ClearCommError(p.h, &errs, &st); e != nil {
+		return 0, 0, e
+	}
+	return errs, st.CBInQue, nil
 }
 
 func OpenSerial(o Options) (Port, error) {
@@ -67,8 +107,23 @@ func OpenSerial(o Options) (Port, error) {
 	if e = windows.SetCommTimeouts(h, &timeouts); e != nil {
 		return nil, e
 	}
+	port := &windowsPort{h: h}
+	if windows.SetupComm(h, serialInQueue, serialOutQueue) == nil {
+		port.rxQueue, port.txQueue = serialInQueue, serialOutQueue
+	}
+	prop := commProp{PacketLength: uint16(unsafe.Sizeof(commProp{}))}
+	if r, _, _ := procGetCommProperties.Call(uintptr(h), uintptr(unsafe.Pointer(&prop))); r != 0 {
+		if prop.CurrentRxQueue != 0 {
+			port.rxQueue = prop.CurrentRxQueue
+		}
+		if prop.CurrentTxQueue != 0 {
+			port.txQueue = prop.CurrentTxQueue
+		}
+	}
+	var errs uint32
+	_ = windows.ClearCommError(h, &errs, nil) // discard errors from before open
 	ok = true
-	return &windowsPort{h: h}, nil
+	return port, nil
 }
 func (p *windowsPort) io(data []byte, read bool) (int, error) {
 	p.mu.Lock()

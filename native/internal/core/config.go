@@ -43,6 +43,26 @@ type UIConfig struct {
 	PrivacyVersion int  `json:"privacyVersion"`
 	// JLink remembers the last J-Link RTT settings for the next new session.
 	JLink *RTTOptions `json:"jlink,omitempty"`
+	// LogTheme is the log panel's own theme: "light" (default) or "dark".
+	LogTheme string `json:"logTheme,omitempty"`
+	// LevelColors maps log levels (v/d/i/w/e) to #rrggbb colours.
+	LevelColors map[string]string `json:"levelColors,omitempty"`
+	// LegacyDeviceComplete is the removed 0.4.1-pre Tab completion switch.
+	// Accepted so older config files still load; always cleared after decoding.
+	LegacyDeviceComplete *bool `json:"deviceComplete,omitempty"`
+}
+
+// validLevelColor reports whether s is a #rrggbb colour.
+func validLevelColor(s string) bool {
+	if len(s) != 7 || s[0] != '#' {
+		return false
+	}
+	for _, c := range s[1:] {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+			return false
+		}
+	}
+	return true
 }
 type HistoryPayload struct {
 	Payload
@@ -52,6 +72,31 @@ type CommandConfig struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Payload
+	Description string `json:"description,omitempty"`
+}
+
+// Command groups: four built-in keys plus up to maxExtraGroups user groups
+// named "g:<显示名>" (created by batch import).
+const maxExtraGroups = 28
+
+func validGroupKey(k string) bool {
+	switch k {
+	case "rtt", "at", "binary", "custom":
+		return true
+	}
+	if !strings.HasPrefix(k, "g:") {
+		return false
+	}
+	name := []rune(k[2:])
+	if len(name) == 0 || len(name) > 32 || strings.TrimSpace(string(name)) != string(name) {
+		return false
+	}
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 type DeviceConfig struct {
 	ID              string `json:"id"`
@@ -98,7 +143,8 @@ func DecodeConfig(data []byte) (Config, error) {
 	if e := decoder.Decode(&c); e != nil {
 		return c, errors.New("配置包含无效或未知字段。")
 	}
-	if c.Schema != 1 || c.Devices == nil || len(c.Devices) > 4 || len(c.Commands) != 4 {
+	c.UI.LegacyDeviceComplete = nil
+	if c.Schema != 1 || c.Devices == nil || len(c.Devices) > 4 || len(c.Commands) < 4 || len(c.Commands) > 4+maxExtraGroups {
 		return c, errors.New("配置版本、设备或分组无效。")
 	}
 	ids := map[string]bool{}
@@ -151,14 +197,29 @@ func DecodeConfig(data []byte) (Config, error) {
 		}
 	}
 	for _, g := range []string{"rtt", "at", "binary", "custom"} {
-		list, ok := c.Commands[g]
-		if !ok || list == nil || len(list) > 200 {
+		if list, ok := c.Commands[g]; !ok || list == nil {
+			return c, errors.New("指令分组无效。")
+		}
+	}
+	for g, list := range c.Commands {
+		if !validGroupKey(g) || list == nil || len(list) > 200 {
 			return c, errors.New("指令分组无效。")
 		}
 		for _, p := range list {
-			if len(p.ID) > 128 || len(p.Name) > 320 || !validDraft(p.Payload) {
+			if len(p.ID) > 128 || len(p.Name) > 320 || len(p.Description) > 2000 || !validDraft(p.Payload) {
 				return c, errors.New("快捷指令无效。")
 			}
+		}
+	}
+	if c.UI.LogTheme != "" && c.UI.LogTheme != "light" && c.UI.LogTheme != "dark" {
+		return c, errors.New("日志主题无效。")
+	}
+	if len(c.UI.LevelColors) > 5 {
+		return c, errors.New("日志等级颜色无效。")
+	}
+	for k, v := range c.UI.LevelColors {
+		if !strings.Contains("vdiwe", k) || len(k) != 1 || !validLevelColor(v) {
+			return c, errors.New("日志等级颜色无效。")
 		}
 	}
 	if c.UI.JLink != nil {

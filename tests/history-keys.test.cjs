@@ -76,7 +76,7 @@ test('HEX and text entries come back with their own mode, encoding and ending; t
   }finally{w.close();}
 });
 
-test('multi-line drafts keep normal caret movement; Shift+Enter, Tab completion and periodic send are not hijacked',async()=>{
+test('multi-line drafts keep normal caret movement; Shift+Enter, Tab and periodic send are not hijacked',async()=>{
   const h=await setup(),{el,press,type,w,errors,writes}=h;
   try{
     await sendAll(h,['ps']);
@@ -98,9 +98,8 @@ test('multi-line drafts keep normal caret movement; Shift+Enter, Tab completion 
     for(const m of [{shiftKey:true},{ctrlKey:true},{altKey:true}])assert.equal(press('ArrowUp',m).defaultPrevented,false);
     // Shift+Enter is still a native newline, not a send.
     const before=writes.length;assert.equal(press('Enter',{shiftKey:true}).defaultPrevented,false);await tick(100);assert.equal(writes.length,before);
-    // Tab still asks the device to complete.
-    type('p');await tick(60);assert(press('Tab').defaultPrevented);await tick(150);
-    assert.deepEqual(writes.at(-1).bytes,[...Buffer.from('p\t')]);
+    // Tab is not intercepted and never writes to the port.
+    type('p');await tick(60);const n=writes.length;assert.equal(press('Tab').defaultPrevented,false);await tick(150);assert.equal(writes.length,n);
     assert.deepEqual(errors,[]);
   }finally{w.close();}
 });
