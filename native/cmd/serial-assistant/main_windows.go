@@ -29,7 +29,7 @@ import (
 )
 
 // version is injected at build time: -ldflags "-X main.version=1.2.3"
-var version = "0.4.0"
+var version = "0.4.1"
 
 const releaseRepo = "shaw2001/serial-assistant"
 
@@ -43,6 +43,7 @@ var postMessage = user32.NewProc("PostMessageW")
 var showWindow = user32.NewProc("ShowWindow")
 var isZoomed = user32.NewProc("IsZoomed")
 var isIconic = user32.NewProc("IsIconic")
+var getWindowPlacement = user32.NewProc("GetWindowPlacement")
 var setForegroundWindow = user32.NewProc("SetForegroundWindow")
 var updateWindow = user32.NewProc("UpdateWindow")
 var redrawWindow = user32.NewProc("RedrawWindow")
@@ -301,7 +302,7 @@ func main() {
 	// Opaque #eef2fb WebView2 background (AARRGGBB); the controller sets the
 	// same colour through DefaultBackgroundColor.
 	_ = os.Setenv("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", webviewBackgroundEnv)
-	w := webview.NewWithOptions(webview.WebViewOptions{DataPath: filepath.Join(dir, "WebView2"), BrowserExecutableFolder: browserFolder, AutoFocus: true, WindowOptions: webview.WindowOptions{Hidden: true, Title: "串口助手 · v" + version, Width: 1440, Height: 900}})
+	w := webview.NewWithOptions(webview.WebViewOptions{DataPath: filepath.Join(dir, "WebView2"), BrowserExecutableFolder: browserFolder, AutoFocus: true, WindowOptions: webview.WindowOptions{IconId: appIconID, Hidden: true, Title: "串口助手 · v" + version, Width: 1440, Height: 900}})
 	if w == nil {
 		alert("窗口初始化失败。")
 		if smoke {
@@ -367,6 +368,9 @@ func main() {
 			}
 			return 0
 		}
+		if msg == wmDpiChanged {
+			applyAppIcon(hwnd)
+		}
 		if msg == wmShowWindow || msg == wmActivate || msg == wmSysCommand || msg == wmWindowPosChanged || msg == wmDisplayChange || msg == wmDpiChanged {
 			var flags uint32
 			if msg == wmWindowPosChanged && lp != 0 {
@@ -377,6 +381,22 @@ func main() {
 				scheduleRefresh(hwnd)
 				return result
 			}
+		}
+		if msg == 0x0024 && lp != 0 { // WM_GETMINMAXINFO: maximize to the work area, not over the taskbar
+			result, _, _ := callWindowProc.Call(original, hwnd, msg, wp, lp)
+			if mon, work, ok := monitorRects(windowMonitorRect(hwnd)); ok {
+				mmi := (*[5]struct{ X, Y int32 })(unsafe.Pointer(lp))
+				x, y, w, h := maximizedPlacement(mon, work)
+				mmi[1].X, mmi[1].Y = w, h // ptMaxSize
+				mmi[2].X, mmi[2].Y = x, y // ptMaxPosition
+				if mmi[4].X < w {
+					mmi[4].X = w
+				}
+				if mmi[4].Y < h {
+					mmi[4].Y = h
+				}
+			}
+			return result
 		}
 		if msg == 0x0083 && wp != 0 { // WM_NCCALCSIZE: client area fills the borderless window
 			if zoomed, _, _ := isZoomed.Call(hwnd); zoomed != 0 {
@@ -461,6 +481,7 @@ func main() {
 	})
 	original, _, _ = setWindowLong.Call(uintptr(w.Window()), gwlWndProc, callback)
 	hostHwnd := uintptr(w.Window())
+	applyAppIcon(hostHwnd)
 	// Drop WS_CAPTION so DWM never draws native title text or caption buttons
 	// (the doubled min/max/close); the page draws its own. WS_THICKFRAME, the
 	// system menu and min/max boxes stay for resize, snap and the taskbar.
@@ -613,6 +634,34 @@ func main() {
 				return nil, e
 			}
 			return core.DecodeConfig(data)
+		case "openTextFile":
+			file, e := fileDialog(w, false, "导入快捷指令", "快捷指令.json", "json;*.csv")
+			if e != nil || file == "" {
+				return nil, e
+			}
+			text, e := core.ReadTextFile(file)
+			if e != nil {
+				return nil, e
+			}
+			return map[string]any{"name": filepath.Base(file), "text": text}, nil
+		case "saveTextFile":
+			name, e := arg[string](r, 0)
+			if e != nil {
+				return nil, e
+			}
+			text, e := arg[string](r, 1)
+			if e != nil {
+				return nil, e
+			}
+			ext := strings.ToLower(filepath.Ext(name))
+			if ext != ".json" && ext != ".csv" {
+				return nil, errors.New("只能保存 JSON 或 CSV 文件。")
+			}
+			file, e := fileDialog(w, true, "保存快捷指令", filepath.Base(name), ext[1:])
+			if e != nil || file == "" {
+				return map[string]any{"canceled": true}, e
+			}
+			return map[string]any{"canceled": false, "path": file}, core.WriteTextFile(file, text, ext == ".csv")
 		case "exportConfig":
 			if len(r.Args) == 0 {
 				return nil, errors.New("缺少配置。")
@@ -908,9 +957,16 @@ func grantFixedRuntimeAccess(folder string, diag *diagLog) {
 // it is still parked at the iconic position, and MonitorFromWindow then
 // answers with the primary monitor.
 func monitorWorkArea(r rect32) (rect32, bool) {
+	mon, work, ok := monitorRects(r)
+	return work, ok && !rectEmpty(mon)
+}
+
+// monitorRects returns the monitor rectangle and the usable work area (with a
+// 1px strip on auto-hide taskbar edges) of the monitor nearest to r.
+func monitorRects(r rect32) (rect32, rect32, bool) {
 	mon, _, _ := monitorFromRect.Call(uintptr(unsafe.Pointer(&r)), 2) // MONITOR_DEFAULTTONEAREST
 	if mon == 0 {
-		return rect32{}, false
+		return rect32{}, rect32{}, false
 	}
 	var info struct {
 		Size          uint32
@@ -919,13 +975,29 @@ func monitorWorkArea(r rect32) (rect32, bool) {
 	}
 	info.Size = uint32(unsafe.Sizeof(info))
 	if ok, _, _ := getMonitorInfo.Call(mon, uintptr(unsafe.Pointer(&info))); ok == 0 {
-		return rect32{}, false
+		return rect32{}, rect32{}, false
 	}
-	work := info.Work
-	if work == info.Monitor && autoHideTaskbar() {
-		work.Bottom--
+	work := usableWorkArea(info.Monitor, info.Work, autoHideEdges(info.Monitor))
+	return info.Monitor, work, !rectEmpty(work)
+}
+
+// windowMonitorRect is the rectangle used to pick the window's monitor. While
+// iconic the window is parked at (-32000,-32000); use its restored placement.
+func windowMonitorRect(hwnd uintptr) rect32 {
+	var r rect32
+	if iconic, _, _ := isIconic.Call(hwnd); iconic != 0 {
+		var wp struct {
+			Length, Flags, ShowCmd uint32
+			MinPos, MaxPos         struct{ X, Y int32 }
+			Normal                 rect32
+		}
+		wp.Length = uint32(unsafe.Sizeof(wp))
+		if ok, _, _ := getWindowPlacement.Call(hwnd, uintptr(unsafe.Pointer(&wp))); ok != 0 {
+			return wp.Normal
+		}
 	}
-	return work, work.Right > work.Left && work.Bottom > work.Top
+	getWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&r)))
+	return r
 }
 
 // resizeFrame is the per-side resize frame (SM_CXSIZEFRAME+SM_CXPADDEDBORDER)
@@ -944,8 +1016,11 @@ func resizeFrame(hwnd uintptr) (int32, int32) {
 	return metric(32) + metric(92), metric(33) + metric(92) // SM_CXSIZEFRAME/SM_CYSIZEFRAME + SM_CXPADDEDBORDER
 }
 
-func autoHideTaskbar() bool {
-	var data struct {
+// autoHideEdges reports which edges of this monitor have an auto-hide taskbar
+// (ABM_GETAUTOHIDEBAREX); falls back to "bottom" when only the global
+// auto-hide state is known.
+func autoHideEdges(monitor rect32) uint8 {
+	type appBarData struct {
 		Size   uint32
 		Hwnd   uintptr
 		CB     uint32
@@ -953,7 +1028,56 @@ func autoHideTaskbar() bool {
 		Rect   rect32
 		LParam uintptr
 	}
-	data.Size = uint32(unsafe.Sizeof(data))
-	state, _, _ := shAppBarMessage.Call(4, uintptr(unsafe.Pointer(&data))) // ABM_GETSTATE
-	return state&1 != 0                                                    // ABS_AUTOHIDE
+	var edges uint8
+	for e := uint32(0); e < 4; e++ {
+		data := appBarData{Edge: e, Rect: monitor}
+		data.Size = uint32(unsafe.Sizeof(data))
+		if bar, _, _ := shAppBarMessage.Call(0x0B, uintptr(unsafe.Pointer(&data))); bar != 0 { // ABM_GETAUTOHIDEBAREX
+			edges |= 1 << e
+		}
+	}
+	if edges == 0 {
+		data := appBarData{}
+		data.Size = uint32(unsafe.Sizeof(data))
+		if state, _, _ := shAppBarMessage.Call(4, uintptr(unsafe.Pointer(&data))); state&1 != 0 { // ABM_GETSTATE / ABS_AUTOHIDE
+			edges = edgeBottom
+		}
+	}
+	return edges
+}
+
+var loadImageW = user32.NewProc("LoadImageW")
+var sendMessageW = user32.NewProc("SendMessageW")
+var getModuleHandleW = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetModuleHandleW")
+
+// applyAppIcon loads the embedded application icon (resource appIconID, from
+// assets/icon/icon.ico) at the window's DPI and sets it as the big (Alt+Tab,
+// taskbar) and small (title, taskbar at 100%) icon, plus the class icons.
+// Called at creation and on WM_DPICHANGED so each monitor gets crisp pixels.
+func applyAppIcon(hwnd uintptr) {
+	hinst, _, _ := getModuleHandleW.Call(0)
+	metric := func(index uintptr) uintptr {
+		if getSystemMetricsForDpi.Find() == nil && getDpiForWindow.Find() == nil {
+			if dpi, _, _ := getDpiForWindow.Call(hwnd); dpi != 0 {
+				v, _, _ := getSystemMetricsForDpi.Call(index, dpi)
+				return v
+			}
+		}
+		v, _, _ := getSystemMetrics.Call(index)
+		return v
+	}
+	load := func(cx, cy uintptr) uintptr {
+		h, _, _ := loadImageW.Call(hinst, appIconID, 1, cx, cy, 0) // IMAGE_ICON, LR_DEFAULTCOLOR
+		return h
+	}
+	big := load(metric(11), metric(12))   // SM_CXICON/SM_CYICON
+	small := load(metric(49), metric(50)) // SM_CXSMICON/SM_CYSMICON
+	if big != 0 {
+		sendMessageW.Call(hwnd, 0x0080, 1, big)       // WM_SETICON ICON_BIG
+		setClassLongPtr.Call(hwnd, ^uintptr(13), big) // GCLP_HICON (-14)
+	}
+	if small != 0 {
+		sendMessageW.Call(hwnd, 0x0080, 0, small)       // WM_SETICON ICON_SMALL
+		setClassLongPtr.Call(hwnd, ^uintptr(33), small) // GCLP_HICONSM (-34)
+	}
 }

@@ -221,7 +221,9 @@ func (s *Service) snapshotAll(id string) ([]historyEntry, []string, uint64, erro
 		s.mu.Unlock()
 	}
 	s.mu.Lock()
-	history := append([]historyEntry{}, x.history...)
+	// O(1): history entries are immutable once appended and the backing
+	// array is never zeroed, so a capped slice is a stable snapshot.
+	history := x.history[:len(x.history):len(x.history)]
 	trimmed := x.historyTrimmed
 	files := []string{}
 	for _, j := range x.oldJournals {

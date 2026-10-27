@@ -101,7 +101,35 @@ type session struct {
 	oldJournals                               []*Journal
 	periodic                                  *periodic
 	capture                                   bool
+	// Driver-level receive health (Windows ClearCommError / SetupComm).
+	overruns, frameErrors, parityErrors uint64
+	inQueueMax, rxQueue, txQueue        uint32
+	lastCommNotice                      time.Time
 }
+
+// commStats is implemented by ports that can report driver line/queue errors
+// (Windows ClearCommError). errs uses the CE_* bits.
+type commStats interface {
+	CommStatus() (errs uint32, inQueue uint32, err error)
+}
+
+// queueSizer reports the driver queue sizes accepted at open (SetupComm).
+type queueSizer interface{ QueueSizes() (in, out uint32) }
+
+const (
+	ceRxOver   = 0x0001
+	ceOverrun  = 0x0002
+	ceRxParity = 0x0004
+	ceFrame    = 0x0008
+)
+
+// Receive pipeline sizes: the reader goroutine only reads (64 KiB per call)
+// and hands chunks to the processor through rxQueueChunks slots, so a read is
+// always pending while records are being stored/emitted.
+const (
+	rxReadSize    = 64 * 1024
+	rxQueueChunks = 4096
+)
 
 // The display cache (records) mirrors what the log pane can hold. The history
 // is separate: it keeps every record of the session, independent of the “落盘”
@@ -166,19 +194,25 @@ func (s *Service) emitLocked(e Event) {
 	s.eventBytes += n
 }
 func (s *Service) recordLocked(x *session, direction string, data []byte, text string) {
+	s.recordOwnedLocked(x, direction, append([]byte(nil), data...), base64.StdEncoding.EncodeToString(data), text)
+}
+
+// recordOwnedLocked stores a record whose data slice is owned by the caller
+// (never modified afterwards) and whose base64 was computed outside the lock.
+func (s *Service) recordOwnedLocked(x *session, direction string, data []byte, b64 string, text string) {
 	x.seq++
 	now := time.Now()
 	_, zone := now.Zone()
-	r := Record{Type: "record", Seq: x.seq, Time: now.Format(time.RFC3339Nano), TimezoneOffset: zone / 60, MonotonicMs: time.Since(x.started).Milliseconds(), Direction: direction, Length: len(data), DataBase64: base64.StdEncoding.EncodeToString(data), Text: text}
+	r := Record{Type: "record", Seq: x.seq, Time: now.Format(time.RFC3339Nano), TimezoneOffset: zone / 60, MonotonicMs: time.Since(x.started).Milliseconds(), Direction: direction, Length: len(data), DataBase64: b64, Text: text}
 	x.records = append(x.records, r)
 	x.cacheBytes += len(data) + len(text) + 256
-	h := historyEntry{rec: r, data: append([]byte(nil), data...)}
+	h := historyEntry{rec: r, data: data}
 	h.rec.DataBase64 = ""
 	x.history = append(x.history, h)
 	x.historyBytes += historyCost(h.data, h.rec)
 	for len(x.history) > 1 && x.historyBytes > historyMaxBytes {
 		x.historyBytes -= historyCost(x.history[0].data, x.history[0].rec)
-		x.history[0] = historyEntry{}
+		// No zeroing: exports hold O(1) snapshots of this backing array.
 		x.history = x.history[1:]
 		x.historyTrimmed++
 	}
@@ -220,7 +254,7 @@ func (s *Service) snapshotLocked(x *session) map[string]any {
 	if x.periodic != nil {
 		p = map[string]any{"interval": x.periodic.interval, "count": x.periodic.count, "skipped": x.periodic.skipped}
 	}
-	return map[string]any{"id": x.id, "path": x.options.Path, "baudRate": x.options.BaudRate, "config": x.options, "status": x.status, "rx": x.rx, "tx": x.tx, "errors": x.errors, "trimmed": x.trimmed, "viewDropped": x.viewDropped, "captureDropped": dropped, "capture": x.capture, "recorded": recorded, "logFiles": files, "periodic": p, "history": len(x.history), "historyTrimmed": x.historyTrimmed}
+	return map[string]any{"id": x.id, "path": x.options.Path, "baudRate": x.options.BaudRate, "config": x.options, "status": x.status, "rx": x.rx, "tx": x.tx, "errors": x.errors, "trimmed": x.trimmed, "viewDropped": x.viewDropped, "captureDropped": dropped, "capture": x.capture, "recorded": recorded, "logFiles": files, "periodic": p, "history": len(x.history), "historyTrimmed": x.historyTrimmed, "overruns": x.overruns, "frameErrors": x.frameErrors, "parityErrors": x.parityErrors, "inQueueMax": x.inQueueMax, "rxQueue": x.rxQueue, "txQueue": x.txQueue}
 }
 func (s *Service) Snapshot(id string) (any, error) {
 	x, e := s.get(id)
@@ -325,27 +359,87 @@ func (s *Service) Open(id string, o Options) (any, error) {
 			s.recordLocked(x, "SYS", nil, fmt.Sprintf("已连接 %s（可收发：发送写入 RTT 下行通道 %d）", o.RTT.Summary(), o.RTT.Channel))
 		}
 	} else {
-		s.recordLocked(x, "SYS", nil, fmt.Sprintf("已连接 %s · %d bps", o.Path, o.BaudRate))
+		line := fmt.Sprintf("已连接 %s · %d bps", o.Path, o.BaudRate)
+		if q, ok := port.(queueSizer); ok {
+			x.rxQueue, x.txQueue = q.QueueSizes()
+			if x.rxQueue > 0 {
+				line += fmt.Sprintf(" · 驱动接收缓冲 %d KiB", x.rxQueue/1024)
+			}
+		}
+		s.recordLocked(x, "SYS", nil, line)
 	}
 	result := s.snapshotLocked(x)
 	s.mu.Unlock()
 	go s.read(x, port, generation)
 	return result, nil
 }
+type rxChunk struct {
+	data    []byte
+	err     error
+	errs    uint32
+	inQueue uint32
+	stat    bool
+}
+
+// read only reads: every chunk is copied and queued for process, so the next
+// ReadFile is issued immediately and the driver queue is drained even while
+// the processor waits for the service lock (export, batch, other sessions).
+// The queue blocks only after rxQueueChunks pending chunks.
 func (s *Service) read(x *session, p Port, generation uint64) {
-	buf := make([]byte, 8192)
+	ch := make(chan rxChunk, rxQueueChunks)
+	go s.process(x, p, generation, ch)
+	defer close(ch)
+	buf := make([]byte, rxReadSize)
+	cs, _ := p.(commStats)
+	_, hasStatus := p.(statusPort)
+	var lastTick time.Time
 	for {
 		n, e := p.Read(buf)
+		c := rxChunk{err: e}
+		if n > 0 {
+			c.data = append([]byte(nil), buf[:n]...)
+		}
+		if cs != nil && e == nil {
+			if errs, q, err := cs.CommStatus(); err == nil {
+				c.errs, c.inQueue, c.stat = errs, q, true
+			}
+		}
+		tick := hasStatus && n == 0 && time.Since(lastTick) > 50*time.Millisecond
+		if tick {
+			lastTick = time.Now() // let process drain RTT status lines while idle
+		}
+		if n > 0 || e != nil || tick || c.errs != 0 || (c.stat && c.inQueue > 0) {
+			ch <- c
+		}
+		if e != nil {
+			return
+		}
+		if n == 0 {
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func (s *Service) process(x *session, p Port, generation uint64, ch <-chan rxChunk) {
+	for c := range ch {
+		b64 := ""
+		if len(c.data) > 0 {
+			b64 = base64.StdEncoding.EncodeToString(c.data)
+		}
 		s.mu.Lock()
 		if x.generation != generation || x.status != "connected" {
 			s.mu.Unlock()
-			return
+			continue // keep draining until the reader stops
 		}
 		s.statusLocked(x, p)
-		if n > 0 {
-			s.recordLocked(x, "RX", buf[:n], "")
+		if c.stat {
+			s.commLocked(x, c.errs, c.inQueue)
 		}
-		if e != nil {
+		if len(c.data) > 0 {
+			s.recordOwnedLocked(x, "RX", c.data, b64, "")
+		}
+		if c.err != nil {
+			e := c.err
 			s.stopPeriodicLocked(x)
 			x.status = "error"
 			x.generation++
@@ -371,12 +465,48 @@ func (s *Service) read(x *session, p Port, generation uint64) {
 					s.finishJournal(x)
 				}
 			}()
-			return
+			continue
 		}
 		s.mu.Unlock()
-		if n == 0 {
-			time.Sleep(time.Millisecond)
-		}
+	}
+}
+
+// commNoticeEvery limits driver-error notices in the log (all are counted).
+var commNoticeEvery = time.Second
+
+// commLocked counts ClearCommError results and writes a Chinese SYS notice.
+func (s *Service) commLocked(x *session, errs uint32, inQueue uint32) {
+	if inQueue > x.inQueueMax {
+		x.inQueueMax = inQueue
+	}
+	if errs == 0 {
+		return
+	}
+	parts := []string{}
+	if errs&ceRxOver != 0 {
+		x.overruns++
+		parts = append(parts, "驱动缓冲溢出，可能丢失数据（CE_RXOVER）")
+	}
+	if errs&ceOverrun != 0 {
+		x.overruns++
+		parts = append(parts, "串口硬件 FIFO 溢出，可能丢失数据（CE_OVERRUN）")
+	}
+	if errs&ceFrame != 0 {
+		x.frameErrors++
+		parts = append(parts, "帧错误（CE_FRAME），请检查波特率/数据位/停止位")
+	}
+	if errs&ceRxParity != 0 {
+		x.parityErrors++
+		parts = append(parts, "校验错误（CE_RXPARITY），请检查校验位设置")
+	}
+	if len(parts) == 0 || time.Since(x.lastCommNotice) < commNoticeEvery {
+		return
+	}
+	x.lastCommNotice = time.Now()
+	text := strings.Join(parts, "；") + fmt.Sprintf("。累计溢出 %d 次、帧错误 %d 次、校验错误 %d 次。", x.overruns, x.frameErrors, x.parityErrors)
+	s.recordLocked(x, "SYS", nil, text)
+	if errs&(ceRxOver|ceOverrun) != 0 {
+		s.emitLocked(Event{Type: "warning", ID: x.id, Text: "串口接收溢出，可能丢失数据。"})
 	}
 }
 

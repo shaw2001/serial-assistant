@@ -183,3 +183,48 @@ func (g *firstShowGate) shownBy() string {
 	}
 	return ""
 }
+
+// Auto-hide taskbar edges (bit 1<<ABE_*: left=0, top=1, right=2, bottom=3).
+const (
+	edgeLeft uint8 = 1 << iota
+	edgeTop
+	edgeRight
+	edgeBottom
+)
+
+// usableWorkArea is the area a maximized window may cover on one monitor.
+// An auto-hide taskbar reports work == monitor; covering that edge completely
+// makes the taskbar unable to pop up (Windows treats the window as
+// full-screen), so a 1px strip is left on every auto-hide edge.
+func usableWorkArea(monitor, work rect32, autoHide uint8) rect32 {
+	if rectEmpty(work) {
+		work = monitor
+	}
+	if autoHide&edgeLeft != 0 && work.Left == monitor.Left {
+		work.Left++
+	}
+	if autoHide&edgeTop != 0 && work.Top == monitor.Top {
+		work.Top++
+	}
+	if autoHide&edgeRight != 0 && work.Right == monitor.Right {
+		work.Right--
+	}
+	if autoHide&edgeBottom != 0 && work.Bottom == monitor.Bottom {
+		work.Bottom--
+	}
+	return work
+}
+
+// maximizedPlacement fills MINMAXINFO.ptMaxPosition/ptMaxSize: the maximized
+// window rectangle is exactly the work area (position relative to the
+// monitor's origin), instead of the default monitor rectangle plus the resize
+// frame overhang. A borderless window that overhangs the whole monitor is
+// treated by the shell as full-screen and the taskbar is pushed behind it.
+func maximizedPlacement(monitor, work rect32) (x, y, w, h int32) {
+	return work.Left - monitor.Left, work.Top - monitor.Top, work.Right - work.Left, work.Bottom - work.Top
+}
+
+// appIconID is the RT_GROUP_ICON resource id goversioninfo v1.5.0 assigns to
+// -icon (id 1 is taken by RT_VERSION/RT_MANIFEST numbering; verified with a
+// PE resource dump of the release EXE).
+const appIconID = 2

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -156,5 +157,62 @@ func TestStartupShowTimeoutIsShortButNotInstant(t *testing.T) {
 	}
 	if swShowDefault != 10 {
 		t.Fatal("first show must use SW_SHOWDEFAULT")
+	}
+}
+
+func TestMaximizedPlacementKeepsTaskbarVisible(t *testing.T) {
+	mon := rect32{0, 0, 1920, 1080}
+	// Taskbar at the bottom (48px): maximized window is exactly the work area.
+	work := usableWorkArea(mon, rect32{0, 0, 1920, 1032}, 0)
+	if x, y, w, h := maximizedPlacement(mon, work); x != 0 || y != 0 || w != 1920 || h != 1032 {
+		t.Fatalf("bottom taskbar: %d,%d %dx%d", x, y, w, h)
+	}
+	// Second monitor to the right with a left taskbar: position is monitor-relative.
+	mon2 := rect32{1920, -200, 1920 + 2560, -200 + 1440}
+	work2 := usableWorkArea(mon2, rect32{1920 + 62, -200, 1920 + 2560, -200 + 1440}, 0)
+	if x, y, w, h := maximizedPlacement(mon2, work2); x != 62 || y != 0 || w != 2498 || h != 1440 {
+		t.Fatalf("second monitor: %d,%d %dx%d", x, y, w, h)
+	}
+	// Auto-hide bottom taskbar: work == monitor, keep a 1px strip only at the bottom.
+	if got := usableWorkArea(mon, mon, edgeBottom); got != (rect32{0, 0, 1920, 1079}) {
+		t.Fatalf("auto-hide bottom: %v", got)
+	}
+	if got := usableWorkArea(mon, mon, edgeTop|edgeLeft); got != (rect32{1, 1, 1920, 1080}) {
+		t.Fatalf("auto-hide top+left: %v", got)
+	}
+	// Auto-hide on a monitor whose work area already excludes a fixed taskbar edge is not inset twice.
+	if got := usableWorkArea(mon, rect32{0, 0, 1920, 1032}, edgeBottom); got != (rect32{0, 0, 1920, 1032}) {
+		t.Fatalf("fixed taskbar must not shrink: %v", got)
+	}
+	// The NCCALCSIZE clamp accepts the exact work-area window rectangle.
+	if c, src := maximizedClientRect(work, work, true, 8, 8); c != work || src != "work-area" {
+		t.Fatalf("client %v %s", c, src)
+	}
+}
+
+func TestAppIconHasAllWindowsSizes(t *testing.T) {
+	b, err := os.ReadFile("../../../assets/icon/icon.ico")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b) < 6 || b[2] != 1 {
+		t.Fatal("not an .ico file")
+	}
+	n := int(b[4]) | int(b[5])<<8
+	got := map[int]bool{}
+	for i := 0; i < n; i++ {
+		w := int(b[6+16*i])
+		if w == 0 {
+			w = 256
+		}
+		got[w] = true
+	}
+	for _, size := range []int{16, 24, 32, 48, 256} {
+		if !got[size] {
+			t.Fatalf("icon.ico lacks %dpx (has %v)", size, got)
+		}
+	}
+	if appIconID != 2 {
+		t.Fatalf("appIconID must match goversioninfo's RT_GROUP_ICON id")
 	}
 }

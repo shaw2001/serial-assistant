@@ -1,0 +1,16 @@
+﻿group,name,command,hex,newline,encoding,description
+RT-Thread,线程列表,ps,false,crlf,utf-8,列出 RT-Thread 线程
+RT-Thread,定时器列表,list_timer,false,crlf,utf-8,
+RT-Thread,低功耗状态,pm_dump,false,crlf,utf-8,
+RT-Thread,系统信息,sysinfo,false,crlf,utf-8,
+RT-Thread,CPU 使用率,cpu,false,crlf,utf-8,
+AT 指令,连通测试,AT,false,crlf,utf-8,模组应答 OK
+AT 指令,设备信息,ATI,false,crlf,utf-8,
+AT 指令,信号强度,AT+CSQ,false,crlf,utf-8,
+AT 指令,注册状态,AT+CREG?,false,crlf,utf-8,
+AT 指令,查询卡号,AT+CCID,false,crlf,utf-8,
+Modbus,读取寄存器,01 03 00 00 00 02 C4 0B,true,none,utf-8,Modbus RTU：从站 1 读 2 个保持寄存器
+常用,重启,reboot,false,lf,utf-8,
+电源管理,关机,poweroff,false,crlf,utf-8,自定义分组示例：分组不存在时自动新建
+电源管理,GBK 中文指令,显示 你好,false,crlf,gbk,encoding=gbk 时按 GBK 字节发送
+电源管理,无结尾符,status,false,none,utf-8,newline=none：不追加换行
