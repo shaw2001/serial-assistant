@@ -1,4 +1,6 @@
-export const fromBase64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+// Plain loop: Uint8Array.from(atob(s),fn) goes through the iterator protocol per byte
+// and was ~5x slower on 300 KB/s streams.
+export const fromBase64=s=>{const b=atob(s),n=b.length,u=new Uint8Array(n);for(let i=0;i<n;i++)u[i]=b.charCodeAt(i);return u;};
 export const toHex=b=>Array.from(b,x=>x.toString(16).padStart(2,'0').toUpperCase()).join(' ');
 // The log pane keeps up to LOG_ROW_CAP lines (and raw records to rebuild them).
 export const LOG_ROW_CAP=50000,LOG_BYTE_CAP=64*1024*1024;

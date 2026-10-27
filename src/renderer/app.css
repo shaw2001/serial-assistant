@@ -68,7 +68,7 @@ html,body{background:#eef2fb;color:var(--tx1)}
 #sui2 .su-vsep{width:1px;height:18px;background:var(--line2);margin:0 2px;flex:none}
 #sui2 .su-tabs{display:flex;align-items:center;gap:2px;min-width:0;overflow:hidden;background:var(--pill);border:1px solid var(--pill-b);border-radius:999px;padding:2px;box-shadow:inset 0 1px 2px rgba(20,30,60,.06)}
 /* The pill is the wrapper, so the close button sits inside the same shape. */
-#sui2 .su-tab-wrap{display:flex;align-items:center;min-width:0;height:26px;border-radius:999px;background:transparent;transition:background-color .18s ease,box-shadow .18s ease}
+#sui2 .su-tab-wrap{display:flex;align-items:center;min-width:0;height:26px;border-radius:999px;background:transparent;transition:background-color .18s ease}
 #sui2 .su-tab-wrap:hover{background:var(--pill-h)}
 #sui2 .su-tab{display:flex;align-items:center;gap:6px;height:26px;min-width:0;padding:0 4px 0 10px;border:0;border-radius:999px 0 0 999px;background:transparent;color:var(--tx2);white-space:nowrap;transition:color .18s ease}
 #sui2 .su-tab b{font-weight:600;color:var(--tx1);font-family:var(--mono);font-size:12px}
@@ -121,14 +121,14 @@ html,body{background:#eef2fb;color:var(--tx1)}
   background:var(--surface);box-shadow:var(--card-shadow)}
 #sui2 .su-lh{display:flex;align-items:center;gap:4px;padding:0 4px 0 6px;min-width:0;white-space:nowrap;height:28px}
 #sui2 .su-seg{display:flex;height:22px;border-radius:999px;background:var(--field);border:1px solid var(--pill-b);padding:2px;gap:2px;flex:none}
-#sui2 .su-seg button{border:0;border-radius:999px;background:transparent;color:var(--tx2);font-size:11.5px;padding:0 9px;height:100%;transition:background-color .18s ease,color .18s ease,box-shadow .18s ease}
+#sui2 .su-seg button{border:0;border-radius:999px;background:transparent;color:var(--tx2);font-size:11.5px;padding:0 9px;height:100%;transition:background-color .18s ease,color .18s ease}
 #sui2 .su-seg button[aria-pressed="true"]{background:var(--thumb);color:var(--tx1);font-weight:600;box-shadow:0 1px 2px rgba(20,30,60,.14),0 0 0 1px var(--line)}
 #sui2 .su-seg button[aria-pressed="true"]{color:var(--accent)}
 #sui2 .su-mini{height:22px;padding:0 8px;border-radius:999px;display:flex;align-items:center;border:1px solid var(--pill-b);background:var(--field);flex:none}
 #sui2 .su-mini select{border:0;background:transparent;color:var(--tx2);font-size:11.5px;height:20px;padding:0;outline:none}
 #sui2 .su-lsep{width:1px;height:14px;background:var(--line2);margin:0 2px;flex:none}
 #sui2 .su-tg{position:relative;display:flex;align-items:center;gap:5px;height:22px;padding:0 6px;border:0;border-radius:999px;background:transparent;color:var(--tx3);font-size:11.5px;flex:none;transition:color .18s ease,background-color .18s ease}
-#sui2 .su-tg i{width:12px;height:12px;border-radius:3px;border:1.5px solid var(--tx4);display:grid;place-items:center;flex:none;transition:background-color .18s ease,border-color .18s ease,box-shadow .18s ease,border-radius .18s ease}
+#sui2 .su-tg i{width:12px;height:12px;border-radius:3px;border:1.5px solid var(--tx4);display:grid;place-items:center;flex:none;transition:background-color .18s ease,border-color .18s ease,border-radius .18s ease}
 #sui2 .su-tg input{position:absolute;opacity:0;width:1px;height:1px}
 #sui2 .su-tg:has(input:checked),#sui2 .su-tg[aria-pressed="true"]{color:var(--tx2)}
 #sui2 .su-tg:has(input:checked) i,#sui2 .su-tg[aria-pressed="true"] i{background:linear-gradient(180deg,#8ab6ff,#3d74ff);border-color:transparent;box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
@@ -141,7 +141,7 @@ html,body{background:#eef2fb;color:var(--tx1)}
 #sui2 .su-rec:has(input:checked) .su-rec-off{display:none}
 #sui2 .su-rec:has(input:checked) .su-rec-on{display:inline}
 #sui2 .su-filt{display:flex;gap:2px}
-#sui2 .su-filt button{font:10.5px/18px var(--mono);height:18px;padding:0 5px;border-radius:999px;border:1px solid var(--pill-b);background:var(--field);color:var(--tx3);transition:background-color .18s ease,color .18s ease,box-shadow .18s ease,border-color .18s ease}
+#sui2 .su-filt button{font:10.5px/18px var(--mono);height:18px;padding:0 5px;border-radius:999px;border:1px solid var(--pill-b);background:var(--field);color:var(--tx3);transition:background-color .18s ease,color .18s ease,border-color .18s ease}
 #sui2 .su-filt button[aria-pressed="true"]{color:var(--accent);background:var(--accentbg);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
 #sui2 .su-search{display:flex;align-items:center;gap:4px;height:22px;width:220px;min-width:120px;flex:0 1 220px;padding:0 4px 0 7px;border-radius:999px;background:var(--pill);border:1px solid var(--pill-b);box-shadow:inset 0 1px 1px rgba(20,30,60,.04)}
 #sui2 .su-search:focus-within,#sui2 .su-search:has(input:not(:placeholder-shown)){border-color:color-mix(in srgb,var(--accent) 70%,transparent);box-shadow:0 0 0 3px var(--accentbg),inset 0 1px 1px rgba(20,30,60,.04)}
@@ -535,7 +535,7 @@ html,body{background:#eef2fb;color:var(--tx1)}
 #sui2 .su-overflow{color:#fff;background:var(--err);border-radius:999px;padding:0 7px;font-weight:600;font-size:10.5px;line-height:16px}
 
 /* Collapsed sidebar: a clean 44px glass rail (expand button + vertical title). */
-#sui2 .su-workspace{transition:grid-template-columns .22s cubic-bezier(.2,.8,.3,1)}
+#sui2 .su-workspace{transition:none} /* 0.4.2: animating grid columns relaid out the whole log every frame */
 #sui2.su-rail-off .su-workspace{grid-template-columns:minmax(0,1fr) 44px}
 #sui2.su-rail-off .su-rcol{grid-template-rows:minmax(0,1fr)}
 #sui2.su-rail-off .su-stats{display:none}
@@ -592,3 +592,24 @@ html,body{background:#eef2fb;color:var(--tx1)}
 #sui2 :is(.su-send-button,.su-primary,.su-connect,.su-danger,.su-command-send):active:not(:disabled){filter:brightness(.94);color:#fff}
 #sui2 :is(.su-send-button,.su-primary,.su-connect,.su-danger):focus-visible{color:#fff}
 #sui2 .su-logo{display:block;flex:none;width:30px;height:30px;border-radius:0;background:none;box-shadow:none;filter:drop-shadow(0 3px 8px rgba(10,108,255,.28));image-rendering:auto}
+/* 自动滚动关闭时的新数据提示（点击跳到底部）。 */
+#sui2 .su-new-data{position:sticky;bottom:10px;left:100%;float:right;margin:-34px 14px 0 0;z-index:5;height:26px;padding:0 12px;border-radius:999px;border:1px solid #4d95ff;color:#fff;font-size:12px;background:linear-gradient(180deg,#3d8bff,#0a6cff);box-shadow:0 6px 16px -6px rgba(10,108,255,.7);cursor:pointer}
+#sui2 .su-new-data[hidden]{display:none}
+#sui2 .su-new-data:hover{filter:brightness(1.08)}
+
+/* 0.4.2 performance: off-screen log rows skip style/layout/paint. */
+#sui2 .su-log-row{content-visibility:auto;contain-intrinsic-size:auto 20px}
+#sui2 .su-log-screen{contain:strict;overflow-anchor:none}
+/* 0.4.2 performance: the backdrop is static, so instead of re-blurring it behind
+   every large panel on each repaint (log stream, sidebar, header), the backdrop
+   is pre-blurred once in its own layer and the big panels drop backdrop-filter.
+   Transient surfaces (dialogs, popovers, toast, overlay) keep the live blur. */
+#sui2 .su-header,#sui2 .su-log-panel,#sui2 .su-commands,#sui2 .su-stats{-webkit-backdrop-filter:none;backdrop-filter:none;
+  background:linear-gradient(180deg,rgba(255,255,255,.62),rgba(255,255,255,.42) 46%,rgba(255,255,255,.36))}
+/* Pre-blurred rings: drawn soft directly (no filter layer to re-composite each frame). */
+#sui2::before{filter:none;will-change:auto;
+  background:
+    radial-gradient(circle at 30% 34%,transparent 0 calc(25vmax - 22px),rgba(255,255,255,.32) 25vmax,transparent calc(25vmax + 22px)),
+    radial-gradient(circle at 78% 62%,transparent 0 calc(17vmax - 22px),rgba(255,255,255,.32) 17vmax,transparent calc(17vmax + 22px)),
+    radial-gradient(circle at 56% 12%,transparent 0 calc(11vmax - 22px),rgba(255,255,255,.32) 11vmax,transparent calc(11vmax + 22px))}
+#sui2 .su-log-panel,#sui2 .su-commands{contain:layout paint}
